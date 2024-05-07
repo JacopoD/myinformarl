@@ -35,10 +35,10 @@ class SharedReplayBuffer(object):
         obs_shape = get_shape_from_obs_space(obs_space)
         share_obs_shape = get_shape_from_obs_space(cent_obs_space)
 
-        if type(obs_shape[-1]) == list:
+        if isinstance(obs_shape[-1], list):
             obs_shape = obs_shape[:1]
 
-        if type(share_obs_shape[-1]) == list:
+        if isinstance(share_obs_shape[-1], list):
             share_obs_shape = share_obs_shape[:1]
 
         self.share_obs = np.zeros(

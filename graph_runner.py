@@ -47,14 +47,11 @@ class GMPERunner(Runner):
                     actions_env
                 )
 
-                print(obs, node_obs)
-
-                data = (
+                self.insert(
                     obs,
                     agent_id,
                     node_obs,
                     adj,
-                    agent_id,
                     rewards,
                     dones,
                     infos,
@@ -64,9 +61,6 @@ class GMPERunner(Runner):
                     rnn_states,
                     rnn_states_critic,
                 )
-
-                # insert data into buffer
-                self.insert(data)
 
             # compute return and update network
             self.compute()
@@ -179,33 +173,31 @@ class GMPERunner(Runner):
             actions_env,
         )
 
-    def insert(self, data):
-        (
-            obs,
-            agent_id,
-            node_obs,
-            adj,
-            agent_id,
-            rewards,
-            dones,
-            infos,
-            values,
-            actions,
-            action_log_probs,
-            rnn_states,
-            rnn_states_critic,
-        ) = data
-
-        rnn_states[dones == True] = np.zeros(
-            ((dones == True).sum(), self.recurrent_N, self.hidden_size),
+    def insert(
+        self,
+        obs,
+        agent_id,
+        node_obs,
+        adj,
+        rewards,
+        dones,
+        infos,
+        values,
+        actions,
+        action_log_probs,
+        rnn_states,
+        rnn_states_critic,
+    ):
+        rnn_states[dones] = np.zeros(
+            ((dones).sum(), self.recurrent_N, self.hidden_size),
             dtype=np.float32,
         )
-        rnn_states_critic[dones == True] = np.zeros(
-            ((dones == True).sum(), *self.buffer.rnn_states_critic.shape[3:]),
+        rnn_states_critic[dones] = np.zeros(
+            ((dones).sum(), *self.buffer.rnn_states_critic.shape[3:]),
             dtype=np.float32,
         )
         masks = np.ones((self.n_rollout_threads, self.num_agents, 1), dtype=np.float32)
-        masks[dones == True] = np.zeros(((dones == True).sum(), 1), dtype=np.float32)
+        masks[dones] = np.zeros(((dones).sum(), 1), dtype=np.float32)
 
         # if centralized critic, then shared_obs is concatenation of obs from all agents
         if self.use_centralized_V:
