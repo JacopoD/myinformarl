@@ -200,21 +200,21 @@ class MultiAgentBaseEnv(gym.Env):
 
     # set env action for a particular agent
     def _set_action(
-        self, action, agent: Agent, action_space, time: Optional = None
+        self, action, agent: Agent, action_space, time = None
     ) -> None:
         agent.action.u = np.zeros(self.world.dim_p)
         agent.action.c = np.zeros(self.world.dim_c)
         # process action
-        if isinstance(action_space, MultiDiscrete):
-            act = []
-            size = action_space.high - action_space.low + 1
-            index = 0
-            for s in size:
-                act.append(action[index : (index + s)])
-                index += s
-            action = act
-        else:
-            action = [action]
+        # if isinstance(action_space, MultiDiscrete):
+        #     act = []
+        #     size = action_space.high - action_space.low + 1
+        #     index = 0
+        #     for s in size:
+        #         act.append(action[index : (index + s)])
+        #         index += s
+        #     action = act
+        # else:
+        action = [action]
 
         # actions: [None, ←, →, ↓, ↑, comm1, comm2]
         if agent.movable:

@@ -5,7 +5,7 @@ algorithm_name = "rmappo"
 experiment_name = "aaa"
 use_centralized_V = True
 use_obs_instead_of_state = False
-num_env_steps = 1000
+num_env_steps = 10000
 n_rollout_threads = 32
 n_eval_rollout_threads = 1
 n_render_rollout_threads = 5
@@ -78,7 +78,7 @@ min_dist_thresh = 0.05
 use_dones = False
 episode_length = 200
 max_edge_dist = 1
-obs_type = "global"
+obs_type = "local"
 num_nbd_entities = 3
 use_comm = False
 
@@ -86,7 +86,9 @@ use_comm = False
 save_interval = 10000000
 use_eval = False
 eval_interval = 100000000
-log_interval = 5
+log_interval = 1
+
+use_wandb = False
 
 # dir
-model_dir = "./models"
+model_dir = None

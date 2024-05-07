@@ -13,8 +13,10 @@ class MPERunner(Runner):
     collection for the MPEs. See parent class for details
     """
 
-    def __init__(self, config, envs, eval_envs, device):
-        super(MPERunner, self).__init__(config, envs, eval_envs, device)
+    dt = 0.1
+
+    def __init__(self, config, envs, eval_envs, device, run_dir):
+        super(MPERunner, self).__init__(config, envs, eval_envs, device, run_dir)
 
     def run(self):
         self.warmup()
@@ -67,8 +69,8 @@ class MPERunner(Runner):
             )
 
             # save model
-            if episode % self.save_interval == 0 or episode == episodes - 1:
-                self.save()
+            # if episode % self.save_interval == 0 or episode == episodes - 1:
+            #     self.save()
 
             # log information
             if episode % self.log_interval == 0:

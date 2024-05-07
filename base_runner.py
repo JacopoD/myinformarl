@@ -5,7 +5,7 @@ import numpy as np
 import torch
 
 # from torch.utils.tensorboard import SummaryWriter
-# from tensorboardX import SummaryWriter  # tensorboardX to work with macos
+from tensorboardX import SummaryWriter  # tensorboardX to work with macos
 from utils.shared_buffer import SharedReplayBuffer
 from algorithms.MAPPOPolicy import R_MAPPOPolicy as Policy
 from algorithms.mappo import R_MAPPO as TrainAlgo
@@ -16,12 +16,13 @@ class Runner(object):
     :param config: (dict) Config dictionary containing parameters for training.
     """
 
-    def __init__(self, config, envs, eval_envs, device):
+    def __init__(self, config, envs, eval_envs, device, run_dir):
         self.config = config
         self.envs = envs
         self.eval_envs = eval_envs
         self.device = device
         self.num_agents = config.num_agents
+        self.run_dir = run_dir
         # total entites is agents + goals + obstacles
         self.num_entities = (
             self.num_agents + self.num_agents + self.config.num_obstacles
@@ -54,19 +55,18 @@ class Runner(object):
         self.model_dir = self.config.model_dir
 
         # if not testing model
-        # if not self.use_render:
-        #     if self.use_wandb:
-        #         self.save_dir = str(wandb.run.dir)
-        #         self.run_dir = str(wandb.run.dir)
-        #     else:
-        #         self.run_dir = config["run_dir"]
-        #         self.log_dir = str(self.run_dir / "logs")
-        #         if not os.path.exists(self.log_dir):
-        #             os.makedirs(self.log_dir)
-        #         # self.writter = SummaryWriter(self.log_dir)
-        #         self.save_dir = str(self.run_dir / "models")
-        #         if not os.path.exists(self.save_dir):
-        #             os.makedirs(self.save_dir)
+        if not self.use_render:
+            if self.use_wandb:
+                self.save_dir = str(wandb.run.dir)
+                self.run_dir = str(wandb.run.dir)
+            else:
+                self.log_dir = str(self.run_dir / "logs")
+                if not os.path.exists(self.log_dir):
+                    os.makedirs(self.log_dir)
+                self.writter = SummaryWriter(self.log_dir)
+                self.save_dir = str(self.run_dir / "models")
+                if not os.path.exists(self.save_dir):
+                    os.makedirs(self.save_dir)
 
         # if self.config.env_name == "GraphMPE":
         #     from onpolicy.algorithms.graph_mappo import GR_MAPPO as TrainAlgo
@@ -101,10 +101,10 @@ class Runner(object):
             device=self.device,
         )
 
-        # if self.model_dir is not None:
-        #     print(f"Restoring from checkpoint stored in {self.model_dir}")
-        #     self.restore()
-        #     self.gif_dir = self.model_dir
+        if self.model_dir is not None:
+            print(f"Restoring from checkpoint stored in {self.model_dir}")
+            self.restore()
+            self.gif_dir = self.model_dir
 
         # algorithm
         self.trainer = TrainAlgo(self.config, self.policy, device=self.device)
