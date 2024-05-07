@@ -1,6 +1,6 @@
 seed = 1
 env_name = "MPE"
-scenario_name = "navigation"
+scenario_name = "navigation_graph"
 algorithm_name = "rmappo"
 experiment_name = "aaa"
 use_centralized_V = True
@@ -83,7 +83,7 @@ num_nbd_entities = 3
 use_comm = False
 
 # interval
-save_interval = 10000000
+save_interval = 100000000
 use_eval = False
 eval_interval = 100000000
 log_interval = 1
@@ -92,3 +92,7 @@ use_wandb = False
 
 # dir
 model_dir = None
+
+graph_feat_type = "relative"
+actor_graph_aggr = "node"
+critic_graph_aggr = "global"

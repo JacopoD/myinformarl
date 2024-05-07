@@ -1,4 +1,5 @@
-from runner import MPERunner
+# from runner import MPERunner
+from graph_runner import GMPERunner as Runner
 import torch
 import numpy as np
 import config as local_config
@@ -13,7 +14,9 @@ from envs.env_wrappers import (
     GraphDummyVecEnv,
 )
 
-from multiagent.MPE_env import MPEEnv
+# from multiagent.MPE_env import MPEEnv
+from multiagent.MPE_env import GraphMPEEnv
+
 
 def main():
     config = local_config
@@ -24,63 +27,55 @@ def main():
     torch.cuda.manual_seed_all(config.seed)
     np.random.seed(config.seed)
 
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
     envs = make_train_env(config)
     eval_envs = make_eval_env(config) if config.use_eval else None
 
-    runner = MPERunner(config, envs, eval_envs, device, run_dir)
+    runner = Runner(config, envs, eval_envs, device, run_dir)
 
     runner.run()
-
 
     envs.close()
     if eval_envs is not None:
         eval_envs.close()
-    
 
 
 def make_train_env(config):
     def get_env_fn(rank: int):
         def init_env():
-            if config.env_name == "MPE":
-                env = MPEEnv(config)
-            else:
-                print(f"Can not support the {config.env_name} environment")
-                raise NotImplementedError
+            env = GraphMPEEnv(config)
             env.seed(config.seed + rank * 1000)
             return env
 
         return init_env
 
     if config.n_rollout_threads == 1:
-        return DummyVecEnv([get_env_fn(0)])
+        return GraphDummyVecEnv([get_env_fn(0)])
     else:
-        return SubprocVecEnv([get_env_fn(i) for i in range(config.n_rollout_threads)])
+        return GraphSubprocVecEnv(
+            [get_env_fn(i) for i in range(config.n_rollout_threads)]
+        )
 
 
 def make_eval_env(config):
     def get_env_fn(rank: int):
         def init_env():
-            if config.env_name == "MPE":
-                env = MPEEnv(config)
-            else:
-                print(f"Can not support the {config.env_name} environment")
-                raise NotImplementedError
+            env = GraphMPEEnv(config)
             env.seed(config.seed * 50000 + rank * 10000)
             return env
 
         return init_env
 
     if config.n_eval_rollout_threads == 1:
-        return DummyVecEnv([get_env_fn(0)])
+        return GraphDummyVecEnv([get_env_fn(0)])
     else:
-        return SubprocVecEnv(
+        return GraphSubprocVecEnv(
             [get_env_fn(i) for i in range(config.n_eval_rollout_threads)]
         )
-    
+
+
 def setup_dirs(config):
-    
     # print_args(config)
 
     # setup file to output tensorboard, hyperparameters, and saved models
@@ -130,6 +125,7 @@ def setup_dirs(config):
             os.makedirs(str(run_dir))
 
     return run_dir
+
 
 if __name__ == "__main__":
     main()
