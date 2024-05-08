@@ -51,9 +51,9 @@ class R_MAPPO:
         self._use_value_active_masks = args.use_value_active_masks
         self._use_policy_active_masks = args.use_policy_active_masks
 
-        assert (
+        assert not (
             self._use_popart and self._use_valuenorm
-        ) == False, "self._use_popart and self._use_valuenorm can not be set True simultaneously"
+        ), "self._use_popart and self._use_valuenorm can not be set True simultaneously"
 
         if self._use_popart:
             self.value_normalizer = self.policy.critic.v_out
@@ -247,13 +247,13 @@ class R_MAPPO:
             training update (e.g. loss, grad norms, etc).
         """
         if self._use_popart or self._use_valuenorm:
-            advantages = buffer.returns[:-1] - self.value_normalizer.denormalize(
-                buffer.value_preds[:-1]
-            )
+            advantages = buffer.cumulative_rewards[
+                :-1
+            ] - self.value_normalizer.denormalize(buffer.values[:-1])
         else:
-            advantages = buffer.returns[:-1] - buffer.value_preds[:-1]
+            advantages = buffer.cumulative_rewards[:-1] - buffer.values[:-1]
         advantages_copy = advantages.copy()
-        advantages_copy[buffer.active_masks[:-1] == 0.0] = np.nan
+        # advantages_copy[buffer.active_masks[:-1] == 0.0] = np.nan
         mean_advantages = np.nanmean(advantages_copy)
         std_advantages = np.nanstd(advantages_copy)
         advantages = (advantages - mean_advantages) / (std_advantages + 1e-5)
@@ -272,14 +272,15 @@ class R_MAPPO:
                 data_generator = buffer.recurrent_generator(
                     advantages, self.num_mini_batch, self.data_chunk_length
                 )
-            elif self._use_naive_recurrent:
+            else:
                 data_generator = buffer.naive_recurrent_generator(
                     advantages, self.num_mini_batch
                 )
-            else:
-                data_generator = buffer.feed_forward_generator(
-                    advantages, self.num_mini_batch
-                )
+            # else:
+                
+            #     data_generator = buffer.feed_forward_generator(
+            #         advantages, self.num_mini_batch
+            #     )
 
             for sample in data_generator:
                 (

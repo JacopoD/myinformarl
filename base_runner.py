@@ -136,9 +136,9 @@ class Runner(object):
             config=self.config,
             local_obs_shape=self.envs.observation_space[0].shape,
             node_obs_shape=self.envs.node_observation_space[0].shape,
-            share_obs_space=share_observation_space.shape,
+            share_obs_shape=share_observation_space.shape,
             action_space=self.envs.action_space[0].n,
-            adj_obs_space = self.envs.adj_observation_space[0].shape,
+            adj_obs_shape = self.envs.adj_observation_space[0].shape,
         )
 
     def run(self):
@@ -169,7 +169,6 @@ class Runner(object):
         """Train policies with data in buffer."""
         self.trainer.prep_training()
         train_infos = self.trainer.train(self.buffer)
-        self.buffer.after_update()
         return train_infos
 
     def save(self):

@@ -28,9 +28,6 @@ class GMPERunner(Runner):
 
         # This is where the episodes are actually run.
         for episode in range(episodes):
-            if self.use_linear_lr_decay:
-                self.trainer.policy.lr_decay(episode, episodes)
-
             for step in range(self.episode_length):
                 # Sample actions
                 # (
@@ -42,13 +39,15 @@ class GMPERunner(Runner):
                 #     actions_env,
                 # ) = self.collect(step)
 
-                actions = [s.sample() for s in self.envs.action_space] + [s.sample() for s in self.envs.action_space]
-                actions = np.expand_dims(actions,1)
+                actions = [s.sample() for s in self.envs.action_space] + [
+                    s.sample() for s in self.envs.action_space
+                ]
+                actions = np.expand_dims(actions, 1)
                 actions = np.array(np.split(actions, self.n_rollout_threads))
                 actions_env = self.one_hot_encode_actions(actions)
                 values = None
                 action_log_probs = None
-                rnn_states = None
+                rnn_states_actor = None
                 rnn_states_critic = None
 
                 # Obs reward and next obs
@@ -56,28 +55,34 @@ class GMPERunner(Runner):
                     actions_env
                 )
 
-                print(node_obs.shape, node_obs)
+                if self.use_centralized_V:
+                    share_obs = obs.reshape(self.n_rollout_threads, -1)
+                    share_obs = np.expand_dims(share_obs, 1).repeat(
+                        self.num_agents, axis=1
+                    )
+                else:
+                    share_obs = obs
 
-                raise NotImplementedError
-
-                self.insert(
-                    obs,
-                    agent_id,
-                    node_obs,
-                    adj,
-                    rewards,
-                    dones,
-                    infos,
-                    values,
-                    actions,
-                    action_log_probs,
-                    rnn_states,
-                    rnn_states_critic,
+                self.buffer.insert(
+                    local_obs=obs,
+                    node_obs=node_obs,
+                    share_obs=share_obs,
+                    adj_obs=adj,
+                    rewards=rewards,
+                    actions=actions,
+                    # values=values,
+                    dones=dones,
+                    rnn_states_actor=rnn_states_actor,
+                    rnn_states_critic=rnn_states_critic,
                 )
+
 
             # compute return and update network
             self.compute()
             train_infos = self.train()
+            
+            self.fake_reset()
+            raise NotImplementedError
 
             # post process
             total_num_steps = (
@@ -109,31 +114,42 @@ class GMPERunner(Runner):
     def one_hot_encode_actions(self, actions):
         return np.squeeze(np.eye(self.envs.action_space[0].n)[actions], 2)
 
+    def fake_reset(self):
+        self.buffer.share_obs[0] = self.buffer.share_obs[-1].copy()
+        self.buffer.local_obs[0] = self.buffer.local_obs[-1].copy()
+        self.buffer.node_obs[0] = self.buffer.node_obs[-1].copy()
+        self.buffer.adj_obs[0] = self.buffer.adj_obs[-1].copy()
+        # self.buffer.agent_id[0] = self.buffer.agent_id[-1].copy()
+        # self.buffer.share_agent_id[0] = self.buffer.share_agent_id[-1].copy()
+        self.buffer.rnn_states_actor[0] = self.buffer.rnn_states_actor[-1].copy()
+        self.buffer.rnn_states_critic[0] = self.buffer.rnn_states_critic[-1].copy()
+        self.buffer.done_masks[0] = self.buffer.done_masks[-1].copy()
+
     def warmup(self):
-        # reset env
         obs, agent_id, node_obs, adj = self.envs.reset()
-        # replay buffer
+
         if self.use_centralized_V:
             # (n_rollout_threads, n_agents, feats) -> (n_rollout_threads, n_agents*feats)
             share_obs = obs.reshape(self.n_rollout_threads, -1)
             # (n_rollout_threads, n_agents*feats) -> (n_rollout_threads, n_agents, n_agents*feats)
             share_obs = np.expand_dims(share_obs, 1).repeat(self.num_agents, axis=1)
+
             # (n_rollout_threads, n_agents, 1) -> (n_rollout_threads, n_agents*1)
-            share_agent_id = agent_id.reshape(self.n_rollout_threads, -1)
+            # share_agent_id = agent_id.reshape(self.n_rollout_threads, -1)
             # (n_rollout_threads, n_agents*1) -> (n_rollout_threads, n_agents, n_agents*1)
-            share_agent_id = np.expand_dims(share_agent_id, 1).repeat(
-                self.num_agents, axis=1
-            )
+            # share_agent_id = np.expand_dims(share_agent_id, 1).repeat(
+            #     self.num_agents, axis=1
+            # )
         else:
             share_obs = obs
-            share_agent_id = agent_id
+            # share_agent_id = agent_id
 
-        self.buffer.share_obs[0] = share_obs.copy()
-        self.buffer.obs[0] = obs.copy()
+        self.buffer.local_obs[0] = obs.copy()
         self.buffer.node_obs[0] = node_obs.copy()
-        self.buffer.adj[0] = adj.copy()
-        self.buffer.agent_id[0] = agent_id.copy()
-        self.buffer.share_agent_id[0] = share_agent_id.copy()
+        self.buffer.share_obs[0] = share_obs.copy()
+        self.buffer.adj_obs[0] = adj.copy()
+        # self.buffer.agent_id[0] = agent_id.copy()
+        # self.buffer.share_agent_id[0] = share_agent_id.copy()
 
     @torch.no_grad()
     def collect(self, step: int) -> Tuple[arr, arr, arr, arr, arr, arr]:
@@ -193,79 +209,25 @@ class GMPERunner(Runner):
             actions_env,
         )
 
-    def insert(
-        self,
-        obs,
-        agent_id,
-        node_obs,
-        adj,
-        rewards,
-        dones,
-        infos,
-        values,
-        actions,
-        action_log_probs,
-        rnn_states,
-        rnn_states_critic,
-    ):
-        rnn_states[dones] = np.zeros(
-            ((dones).sum(), self.recurrent_N, self.hidden_size),
-            dtype=np.float32,
-        )
-        rnn_states_critic[dones] = np.zeros(
-            ((dones).sum(), *self.buffer.rnn_states_critic.shape[3:]),
-            dtype=np.float32,
-        )
-        masks = np.ones((self.n_rollout_threads, self.num_agents, 1), dtype=np.float32)
-        masks[dones] = np.zeros(((dones).sum(), 1), dtype=np.float32)
-
-        # if centralized critic, then shared_obs is concatenation of obs from all agents
-        if self.use_centralized_V:
-            # TODO stack agent_id as well for agent specific information
-            # (n_rollout_threads, n_agents, feats) -> (n_rollout_threads, n_agents*feats)
-            share_obs = obs.reshape(self.n_rollout_threads, -1)
-            # (n_rollout_threads, n_agents*feats) -> (n_rollout_threads, n_agents, n_agents*feats)
-            share_obs = np.expand_dims(share_obs, 1).repeat(self.num_agents, axis=1)
-            # (n_rollout_threads, n_agents, 1) -> (n_rollout_threads, n_agents*1)
-            share_agent_id = agent_id.reshape(self.n_rollout_threads, -1)
-            # (n_rollout_threads, n_agents*1) -> (n_rollout_threads, n_agents, n_agents*1)
-            share_agent_id = np.expand_dims(share_agent_id, 1).repeat(
-                self.num_agents, axis=1
-            )
-        else:
-            share_obs = obs
-            share_agent_id = agent_id
-
-        self.buffer.insert(
-            share_obs,
-            obs,
-            node_obs,
-            adj,
-            agent_id,
-            share_agent_id,
-            rnn_states,
-            rnn_states_critic,
-            actions,
-            action_log_probs,
-            values,
-            rewards,
-            masks,
-        )
-
     @torch.no_grad()
     def compute(self):
         """Calculate returns for the collected data."""
         self.trainer.prep_rollout()
-        next_values = self.trainer.policy.get_values(
+        
+        next_val_pred = self.trainer.policy.get_values(
+            # drop one dimention for batch computation
+            # from (threads, n_agents, *data_shape) -> (threads * n_agents, *data_shape)
             np.concatenate(self.buffer.share_obs[-1]),
             np.concatenate(self.buffer.node_obs[-1]),
-            np.concatenate(self.buffer.adj[-1]),
-            np.concatenate(self.buffer.share_agent_id[-1]),
+            np.concatenate(self.buffer.adj_obs[-1]),
+            # np.concatenate(self.buffer.share_agent_id[-1]),
             np.concatenate(self.buffer.rnn_states_critic[-1]),
-            np.concatenate(self.buffer.masks[-1]),
+            np.concatenate(self.buffer.done_masks[-1]),
         )
-        next_values = np.array(np.split(_t2n(next_values), self.n_rollout_threads))
-        self.buffer.compute_returns(next_values, self.trainer.value_normalizer)
+        # put back thread dimension
+        next_val_pred = np.array(np.split(_t2n(next_val_pred), self.n_rollout_threads))
+        # self.buffer.compute_reward(next_values, self.trainer.value_normalizer)
+        self.buffer.cum_reward(next_val_pred)
 
     @torch.no_grad()
     def eval(self, total_num_steps: int):
