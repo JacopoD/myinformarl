@@ -5,7 +5,7 @@ import torch
 from torch import Tensor
 import torch.nn as nn
 from algorithms.MAPPOPolicy import R_MAPPOPolicy
-from utils.shared_buffer import SharedReplayBuffer
+from utils.graph_buffer import GReplayBuffer
 from utils.utils import get_grad_norm, huber_loss, mse_loss
 from utils.valuenorm import ValueNorm
 from algorithms.utils.util import check
@@ -141,7 +141,17 @@ class R_MAPPO:
             importance sampling weights.
         """
         (
-            share_obs_batch, local_obs_batch, node_obs_batch, adj_obs_batch, rnn_states_actor_batch, rnn_states_critic_batch, actions_batch, values_batch, done_masks_batch, cumulative_rewards_batch, advantages_batch
+            share_obs_batch,
+            local_obs_batch,
+            node_obs_batch,
+            adj_obs_batch,
+            rnn_states_actor_batch,
+            rnn_states_critic_batch,
+            actions_batch,
+            values_batch,
+            done_masks_batch,
+            cumulative_rewards_batch,
+            advantages_batch,
         ) = sample
 
         old_action_log_probs_batch = check(old_action_log_probs_batch).to(**self.tpdv)
@@ -196,9 +206,7 @@ class R_MAPPO:
         self.policy.actor_optimizer.step()
 
         # critic update
-        value_loss = self.cal_value_loss(
-            values, values_batch, cumulative_rewards_batch
-        )
+        value_loss = self.cal_value_loss(values, values_batch, cumulative_rewards_batch)
 
         self.policy.critic_optimizer.zero_grad()
 
@@ -222,7 +230,7 @@ class R_MAPPO:
             imp_weights,
         )
 
-    def train(self, buffer: SharedReplayBuffer, update_actor: bool = True):
+    def train(self, buffer: GReplayBuffer, update_actor: bool = True):
         """
         Perform a training update using minibatch GD.
         buffer: (SharedReplayBuffer)
@@ -256,19 +264,7 @@ class R_MAPPO:
         train_info["ratio"] = 0
 
         for _ in range(self.ppo_epoch):
-            # if self._use_recurrent_policy:
-            #     data_generator = buffer.recurrent_generator(
-            #         advantages, self.num_mini_batch, self.data_chunk_length
-            #     )
-            # else:
-            data_generator = buffer.naive_recurrent_generator(
-                advantages, self.num_mini_batch
-            )
-            # else:
-                
-            #     data_generator = buffer.feed_forward_generator(
-            #         advantages, self.num_mini_batch
-            #     )
+            data_generator = buffer.generator(advantages, self.num_mini_batch)
 
             for sample in data_generator:
                 (

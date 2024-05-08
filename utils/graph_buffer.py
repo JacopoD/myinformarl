@@ -118,7 +118,7 @@ class GReplayBuffer(object):
                 + self.rewards[step]
             )
 
-    def naive_recurrent_generator(self, advantages, num_mini_batch):
+    def generator(self, advantages, num_mini_batch):
         batch_size = self.threads * self.n_agents
         chunk_len = batch_size // num_mini_batch
         batch_perm = np.arange(batch_size)
