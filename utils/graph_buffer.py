@@ -129,8 +129,12 @@ class GReplayBuffer(object):
         local_obs = self.local_obs.reshape(-1, batch_size, *self.local_obs.shape[3:])
         node_obs = self.node_obs.reshape(-1, batch_size, *self.node_obs.shape[3:])
         adj_obs = self.adj_obs.reshape(-1, batch_size, *self.adj_obs.shape[3:])
-        rnn_states_actor = self.rnn_states_actor.reshape(-1, batch_size, *self.rnn_states_actor.shape[3:])
-        rnn_states_critic = self.rnn_states_critic.reshape(-1, batch_size, *self.rnn_states_critic.shape[3:])
+        rnn_states_actor = self.rnn_states_actor.reshape(
+            -1, batch_size, *self.rnn_states_actor.shape[3:]
+        )
+        rnn_states_critic = self.rnn_states_critic.reshape(
+            -1, batch_size, *self.rnn_states_critic.shape[3:]
+        )
         actions = self.actions.reshape(-1, batch_size, self.actions.shape[-1])
         values = self.values.reshape(-1, batch_size, 1)
         done_masks = self.done_masks.reshape(-1, batch_size, 1)
@@ -151,7 +155,7 @@ class GReplayBuffer(object):
             advantages_batch = []
 
             for offset in range(chunk_len):
-                idx = batch_perm[chunk+offset]   
+                idx = batch_perm[chunk + offset]
                 share_obs_batch.append(share_obs[:-1, idx])
                 local_obs_batch.append(local_obs[:-1, idx])
                 node_obs_batch.append(node_obs[:-1, idx])
@@ -182,15 +186,28 @@ class GReplayBuffer(object):
             advantages_batch = np.stack(advantages_batch, 1)
 
             # (episode_length, chunk_len, *data_shape) --> (episode_length * chunk_len, *data_shape)
-            share_obs_batch = _flatten(self.max_len-1, chunk_len, share_obs_batch)
-            local_obs_batch = _flatten(self.max_len-1, chunk_len, local_obs_batch)
-            node_obs_batch = _flatten(self.max_len-1, chunk_len, node_obs_batch)
-            adj_obs_batch = _flatten(self.max_len-1, chunk_len, adj_obs_batch)
-            actions_batch = _flatten(self.max_len-1, chunk_len, actions_batch)
-            values_batch = _flatten(self.max_len-1, chunk_len, values_batch)
-            done_masks_batch = _flatten(self.max_len-1, chunk_len, done_masks_batch)
-            cumulative_rewards_batch = _flatten(self.max_len-1, chunk_len, cumulative_rewards_batch)
-            advantages_batch = _flatten(self.max_len-1, chunk_len, advantages_batch)
+            share_obs_batch = _flatten(self.max_len - 1, chunk_len, share_obs_batch)
+            local_obs_batch = _flatten(self.max_len - 1, chunk_len, local_obs_batch)
+            node_obs_batch = _flatten(self.max_len - 1, chunk_len, node_obs_batch)
+            adj_obs_batch = _flatten(self.max_len - 1, chunk_len, adj_obs_batch)
+            actions_batch = _flatten(self.max_len - 1, chunk_len, actions_batch)
+            values_batch = _flatten(self.max_len - 1, chunk_len, values_batch)
+            done_masks_batch = _flatten(self.max_len - 1, chunk_len, done_masks_batch)
+            cumulative_rewards_batch = _flatten(
+                self.max_len - 1, chunk_len, cumulative_rewards_batch
+            )
+            advantages_batch = _flatten(self.max_len - 1, chunk_len, advantages_batch)
 
-            yield share_obs_batch, local_obs_batch, node_obs_batch, adj_obs_batch, rnn_states_actor_batch, rnn_states_critic_batch, actions_batch, values_batch, done_masks_batch, cumulative_rewards_batch, advantages_batch
-
+            yield (
+                share_obs_batch,
+                local_obs_batch,
+                node_obs_batch,
+                adj_obs_batch,
+                rnn_states_actor_batch,
+                rnn_states_critic_batch,
+                actions_batch,
+                values_batch,
+                done_masks_batch,
+                cumulative_rewards_batch,
+                advantages_batch,
+            )
