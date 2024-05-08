@@ -5,13 +5,13 @@ import gym
 import torch
 from torch import Tensor
 import torch.nn as nn
-from onpolicy.algorithms.utils.util import init, check
-from onpolicy.algorithms.utils.gnn import GNNBase
-from onpolicy.algorithms.utils.mlp import MLPBase
-from onpolicy.algorithms.utils.rnn import RNNLayer
-from onpolicy.algorithms.utils.act import ACTLayer
-from onpolicy.algorithms.utils.popart import PopArt
-from onpolicy.utils.util import get_shape_from_obs_space
+from algorithms.utils.util import init, check
+from algorithms.utils.mlp import MLPBase
+from algorithms.utils.rnn import RNNLayer
+from algorithms.utils.act import ACTLayer
+from algorithms.utils.popart import PopArt
+from algorithms.utils.gnn import GNN
+from utils.util import get_shape_from_obs_space
 
 
 class GraphActor(nn.Module):
@@ -19,14 +19,38 @@ class GraphActor(nn.Module):
     Actor network class for MAPPO. Outputs actions given observations.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, config) -> None:
         super(GraphActor, self).__init__()
+
+
+        gnn = GNN()
+
+        mlp_input_dim = gnn.out_dim + observation.shape
+
+        self.mlp = MLPBase(args=config, input_dim=mlp_input_dim)
+
+        self.rnn = RNNLayer(
+            self.hidden_size,
+            self.hidden_size,
+            self._recurrent_N,
+            self._use_orthogonal,
+        )
+
+        self.act = ACTLayer(
+            "Discrete", self.hidden_size, self._use_orthogonal, self._gain
+        )
         pass
 
     def forward(self) -> Tuple[Tensor, Tensor, Tensor]:
         """
         Compute actions from the given inputs.
         """
+
+        actor_features, rnn_states = self.rnn(actor_features, rnn_states, masks)
+
+        actions, action_log_probs = self.act(
+            actor_features, available_actions, deterministic
+        )
         pass
 
     def evaluate_actions(self) -> Tuple[Tensor, Tensor]:
@@ -45,26 +69,8 @@ class GraphCritic(nn.Module):
         super(GraphCritic, self).__init__()
         pass
 
-    def forward(
-        self, cent_obs, node_obs, adj, agent_id, rnn_states, masks
-    ) -> Tuple[Tensor, Tensor]:
+    def forward(self) -> Tuple[Tensor, Tensor]:
         """
         Compute actions from the given inputs.
-        cent_obs: (np.ndarray / torch.Tensor)
-            Observation inputs into network.
-        node_obs (np.ndarray):
-            Local agent graph node features to the actor.
-        adj (np.ndarray):
-            Adjacency matrix for the graph.
-        agent_id (np.ndarray / torch.Tensor)
-            The agent id to which the observation belongs to
-        rnn_states: (np.ndarray / torch.Tensor)
-            If RNN network, hidden states for RNN.
-        masks: (np.ndarray / torch.Tensor)
-            Mask tensor denoting if RNN states
-            should be reinitialized to zeros.
-
-        :return values: (torch.Tensor) value function predictions.
-        :return rnn_states: (torch.Tensor) updated RNN hidden states.
         """
         pass

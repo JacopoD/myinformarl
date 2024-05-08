@@ -49,8 +49,9 @@ class MLPBase(nn.Module):
     def __init__(
         self,
         args: argparse.Namespace,
-        obs_shape: Union[List, Tuple],
-        override_obs_dim: Optional[int] = None,
+        input_dim: int
+        # obs_shape: Union[List, Tuple],
+        # override_obs_dim: Optional[int] = None,
     ):
         super(MLPBase, self).__init__()
 
@@ -62,17 +63,17 @@ class MLPBase(nn.Module):
         self.hidden_size = args.hidden_size
 
         # override_obs_dim is only used for graph-based models
-        if override_obs_dim is None:
-            obs_dim = obs_shape[0]
-        else:
-            print("Overriding Observation dimension")
-            obs_dim = override_obs_dim
+        # if override_obs_dim is None:
+            # obs_dim = obs_shape[0]
+        # else:
+            # print("Overriding Observation dimension")
+            # obs_dim = override_obs_dim
 
         if self._use_feature_normalization:
-            self.feature_norm = nn.LayerNorm(obs_dim)
+            self.feature_norm = nn.LayerNorm(input_dim)
 
         self.mlp = MLPLayer(
-            obs_dim,
+            input_dim,
             self.hidden_size,
             self._layer_N,
             self._use_orthogonal,
