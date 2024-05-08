@@ -33,19 +33,32 @@ class GMPERunner(Runner):
 
             for step in range(self.episode_length):
                 # Sample actions
-                (
-                    values,
-                    actions,
-                    action_log_probs,
-                    rnn_states,
-                    rnn_states_critic,
-                    actions_env,
-                ) = self.collect(step)
+                # (
+                #     values,
+                #     actions,
+                #     action_log_probs,
+                #     rnn_states,
+                #     rnn_states_critic,
+                #     actions_env,
+                # ) = self.collect(step)
+
+                actions = [s.sample() for s in self.envs.action_space] + [s.sample() for s in self.envs.action_space]
+                actions = np.expand_dims(actions,1)
+                actions = np.array(np.split(actions, self.n_rollout_threads))
+                actions_env = self.one_hot_encode_actions(actions)
+                values = None
+                action_log_probs = None
+                rnn_states = None
+                rnn_states_critic = None
 
                 # Obs reward and next obs
                 obs, agent_id, node_obs, adj, rewards, dones, infos = self.envs.step(
                     actions_env
                 )
+
+                print(node_obs.shape, node_obs)
+
+                raise NotImplementedError
 
                 self.insert(
                     obs,
@@ -92,6 +105,9 @@ class GMPERunner(Runner):
             # eval
             if episode % self.eval_interval == 0 and self.use_eval:
                 self.eval(total_num_steps)
+
+    def one_hot_encode_actions(self, actions):
+        return np.squeeze(np.eye(self.envs.action_space[0].n)[actions], 2)
 
     def warmup(self):
         # reset env
@@ -150,17 +166,21 @@ class GMPERunner(Runner):
             np.split(_t2n(rnn_states_critic), self.n_rollout_threads)
         )
         # rearrange action
-        if self.envs.action_space[0].__class__.__name__ == "MultiDiscrete":
-            for i in range(self.envs.action_space[0].shape):
-                uc_actions_env = np.eye(self.envs.action_space[0].high[i] + 1)[
-                    actions[:, :, i]
-                ]
-                if i == 0:
-                    actions_env = uc_actions_env
-                else:
-                    actions_env = np.concatenate((actions_env, uc_actions_env), axis=2)
-        elif self.envs.action_space[0].__class__.__name__ == "Discrete":
-            actions_env = np.squeeze(np.eye(self.envs.action_space[0].n)[actions], 2)
+        # if self.envs.action_space[0].__class__.__name__ == "MultiDiscrete":
+        #     for i in range(self.envs.action_space[0].shape):
+        #         uc_actions_env = np.eye(self.envs.action_space[0].high[i] + 1)[
+        #             actions[:, :, i]
+        #         ]
+        #         if i == 0:
+        #             actions_env = uc_actions_env
+        #         else:
+        #             actions_env = np.concatenate((actions_env, uc_actions_env), axis=2)
+        # if self.envs.action_space[0].__class__.__name__ == "Discrete":
+        #     actions_env = np.squeeze(np.eye(self.envs.action_space[0].n)[actions], 2)
+        # else:
+        #     raise NotImplementedError
+        if self.envs.action_space[0].__class__.__name__ == "Discrete":
+            actions_env = self.one_hot_encode_actions(actions)
         else:
             raise NotImplementedError
 

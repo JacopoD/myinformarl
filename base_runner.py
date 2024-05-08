@@ -7,6 +7,7 @@ import torch
 # from torch.utils.tensorboard import SummaryWriter
 from tensorboardX import SummaryWriter  # tensorboardX to work with macos
 from utils.shared_buffer import SharedReplayBuffer
+from utils.graph_buffer import GReplayBuffer
 from algorithms.MAPPOPolicy import R_MAPPOPolicy as Policy
 from algorithms.mappo import R_MAPPO as TrainAlgo
 
@@ -123,12 +124,21 @@ class Runner(object):
         #         self.envs.action_space[0],
         #     )
         # else:
-        self.buffer = SharedReplayBuffer(
-            self.config,
-            self.num_agents,
-            self.envs.observation_space[0],
-            share_observation_space,
-            self.envs.action_space[0],
+        # self.buffer = SharedReplayBuffer(
+        #     self.config,
+        #     self.num_agents,
+        #     self.envs.observation_space[0],
+        #     share_observation_space,
+        #     self.envs.action_space[0],
+        # )
+
+        self.buffer = GReplayBuffer(
+            config=self.config,
+            local_obs_shape=self.envs.observation_space[0].shape,
+            node_obs_shape=self.envs.node_observation_space[0].shape,
+            share_obs_space=share_observation_space.shape,
+            action_space=self.envs.action_space[0].n,
+            adj_obs_space = self.envs.adj_observation_space[0].shape,
         )
 
     def run(self):
