@@ -47,8 +47,8 @@ ppo_epoch = 15
 
 data_chunk_length = 10
 
-use_recurrent_policy = True
-use_naive_recurrent_policy = False
+use_recurrent_policy = False
+use_naive_recurrent_policy = True
 
 split_batch = False
 

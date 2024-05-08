@@ -99,7 +99,7 @@ class R_Actor(nn.Module):
         return (actions, action_log_probs, rnn_states)
 
     def evaluate_actions(
-        self, obs, rnn_states, action, masks, available_actions=None, active_masks=None
+        self, obs, node_obs, adj_obs, rnn_states, action, masks, available_actions=None, active_masks=None
     ) -> Tuple[Tensor, Tensor]:
         """
         Compute log probability and entropy of given actions.
@@ -124,15 +124,17 @@ class R_Actor(nn.Module):
             Action distribution entropy for the given inputs.
         """
         obs = check(obs).to(**self.tpdv)
+        node_obs = check(node_obs).to(**self.tpdv)
+        adj_obs = check(adj_obs).to(**self.tpdv)
         rnn_states = check(rnn_states).to(**self.tpdv)
         action = check(action).to(**self.tpdv)
         masks = check(masks).to(**self.tpdv)
-        if available_actions is not None:
-            available_actions = check(available_actions).to(**self.tpdv)
+        # if available_actions is not None:
+        #     available_actions = check(available_actions).to(**self.tpdv)
 
-        if active_masks is not None:
-            active_masks = check(active_masks).to(**self.tpdv)
-
+        # if active_masks is not None:
+        #     active_masks = check(active_masks).to(**self.tpdv)
+        #TODO
         actor_features = self.base(obs)
 
         if self._use_naive_recurrent_policy or self._use_recurrent_policy:
@@ -195,7 +197,7 @@ class R_Critic(nn.Module):
 
         self.to(device)
 
-    def forward(self, cent_obs, rnn_states, masks) -> Tuple[Tensor, Tensor]:
+    def forward(self, cent_obs, node_obs, adj_obs, rnn_states, masks) -> Tuple[Tensor, Tensor]:
         """
         Compute actions from the given inputs.
         cent_obs: (np.ndarray / torch.Tensor)
@@ -210,8 +212,11 @@ class R_Critic(nn.Module):
         :return rnn_states: (torch.Tensor) updated RNN hidden states.
         """
         cent_obs = check(cent_obs).to(**self.tpdv)
+        node_obs = check(node_obs).to(**self.tpdv)
+        adj_obs = check(adj_obs).to(**self.tpdv)
         rnn_states = check(rnn_states).to(**self.tpdv)
         masks = check(masks).to(**self.tpdv)
+        #TODO
 
         critic_features = self.base(cent_obs)
         if self._use_naive_recurrent_policy or self._use_recurrent_policy:

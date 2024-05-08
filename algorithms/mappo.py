@@ -67,7 +67,7 @@ class R_MAPPO:
         values: Tensor,
         value_preds_batch: Tensor,
         return_batch: Tensor,
-        active_masks_batch: Tensor,
+        # active_masks_batch: Tensor,
     ) -> Tensor:
         """
         Calculate value function loss.
@@ -108,12 +108,12 @@ class R_MAPPO:
         else:
             value_loss = value_loss_original
 
-        if self._use_value_active_masks:
-            value_loss = (
-                value_loss * active_masks_batch
-            ).sum() / active_masks_batch.sum()
-        else:
-            value_loss = value_loss.mean()
+        # if self._use_value_active_masks:
+        #     value_loss = (
+        #         value_loss * active_masks_batch
+        #     ).sum() / active_masks_batch.sum()
+        # else:
+        value_loss = value_loss.mean()
 
         return value_loss
 
@@ -141,55 +141,43 @@ class R_MAPPO:
             importance sampling weights.
         """
         (
-            share_obs_batch,
-            obs_batch,
-            rnn_states_batch,
-            rnn_states_critic_batch,
-            actions_batch,
-            value_preds_batch,
-            return_batch,
-            masks_batch,
-            active_masks_batch,
-            old_action_log_probs_batch,
-            adv_targ,
-            available_actions_batch,
+            share_obs_batch, local_obs_batch, node_obs_batch, adj_obs_batch, rnn_states_actor_batch, rnn_states_critic_batch, actions_batch, values_batch, done_masks_batch, cumulative_rewards_batch, advantages_batch
         ) = sample
 
         old_action_log_probs_batch = check(old_action_log_probs_batch).to(**self.tpdv)
-        adv_targ = check(adv_targ).to(**self.tpdv)
-        value_preds_batch = check(value_preds_batch).to(**self.tpdv)
-        return_batch = check(return_batch).to(**self.tpdv)
-        active_masks_batch = check(active_masks_batch).to(**self.tpdv)
+        advantages_batch = check(advantages_batch).to(**self.tpdv)
+        values_batch = check(values_batch).to(**self.tpdv)
+        cumulative_rewards_batch = check(cumulative_rewards_batch).to(**self.tpdv)
 
         # Reshape to do in a single forward pass for all steps
         values, action_log_probs, dist_entropy = self.policy.evaluate_actions(
             share_obs_batch,
-            obs_batch,
-            rnn_states_batch,
+            local_obs_batch,
+            node_obs_batch,
+            adj_obs_batch,
+            rnn_states_actor_batch,
             rnn_states_critic_batch,
             actions_batch,
-            masks_batch,
-            available_actions_batch,
-            active_masks_batch,
+            done_masks_batch,
         )
         # actor update
         imp_weights = torch.exp(action_log_probs - old_action_log_probs_batch)
 
-        surr1 = imp_weights * adv_targ
+        surr1 = imp_weights * advantages_batch
         surr2 = (
             torch.clamp(imp_weights, 1.0 - self.clip_param, 1.0 + self.clip_param)
-            * adv_targ
+            * advantages_batch
         )
 
-        if self._use_policy_active_masks:
-            policy_action_loss = (
-                -torch.sum(torch.min(surr1, surr2), dim=-1, keepdim=True)
-                * active_masks_batch
-            ).sum() / active_masks_batch.sum()
-        else:
-            policy_action_loss = -torch.sum(
-                torch.min(surr1, surr2), dim=-1, keepdim=True
-            ).mean()
+        # if self._use_policy_active_masks:
+        #     policy_action_loss = (
+        #         -torch.sum(torch.min(surr1, surr2), dim=-1, keepdim=True)
+        #         * active_masks_batch
+        #     ).sum() / active_masks_batch.sum()
+        # else:
+        policy_action_loss = -torch.sum(
+            torch.min(surr1, surr2), dim=-1, keepdim=True
+        ).mean()
 
         policy_loss = policy_action_loss
 
@@ -209,7 +197,7 @@ class R_MAPPO:
 
         # critic update
         value_loss = self.cal_value_loss(
-            values, value_preds_batch, return_batch, active_masks_batch
+            values, values_batch, cumulative_rewards_batch
         )
 
         self.policy.critic_optimizer.zero_grad()
@@ -268,14 +256,14 @@ class R_MAPPO:
         train_info["ratio"] = 0
 
         for _ in range(self.ppo_epoch):
-            if self._use_recurrent_policy:
-                data_generator = buffer.recurrent_generator(
-                    advantages, self.num_mini_batch, self.data_chunk_length
-                )
-            else:
-                data_generator = buffer.naive_recurrent_generator(
-                    advantages, self.num_mini_batch
-                )
+            # if self._use_recurrent_policy:
+            #     data_generator = buffer.recurrent_generator(
+            #         advantages, self.num_mini_batch, self.data_chunk_length
+            #     )
+            # else:
+            data_generator = buffer.naive_recurrent_generator(
+                advantages, self.num_mini_batch
+            )
             # else:
                 
             #     data_generator = buffer.feed_forward_generator(

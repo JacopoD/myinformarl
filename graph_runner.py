@@ -5,7 +5,7 @@ from typing import Tuple
 import torch
 from base_runner import Runner
 import imageio
-from utils.utils import _t2n
+from utils.utils import _t2n, _flatten
 
 
 class GMPERunner(Runner):
@@ -161,15 +161,23 @@ class GMPERunner(Runner):
             rnn_states,
             rnn_states_critic,
         ) = self.trainer.policy.get_actions(
-            np.concatenate(self.buffer.share_obs[step]),
-            np.concatenate(self.buffer.obs[step]),
-            np.concatenate(self.buffer.node_obs[step]),
-            np.concatenate(self.buffer.adj[step]),
-            np.concatenate(self.buffer.agent_id[step]),
-            np.concatenate(self.buffer.share_agent_id[step]),
-            np.concatenate(self.buffer.rnn_states[step]),
-            np.concatenate(self.buffer.rnn_states_critic[step]),
-            np.concatenate(self.buffer.masks[step]),
+            # np.concatenate(self.buffer.share_obs[step]),
+            # np.concatenate(self.buffer.local_obs[step]),
+            # np.concatenate(self.buffer.node_obs[step]),
+            # np.concatenate(self.buffer.adj_obs[step]),
+            # np.concatenate(self.buffer.agent_id[step]),
+            # np.concatenate(self.buffer.share_agent_id[step]),
+            # np.concatenate(self.buffer.rnn_states_actor[step]),
+            # np.concatenate(self.buffer.rnn_states_critic[step]),
+            # np.concatenate(self.buffer.done_masks[step]),
+            _flatten(self.n_rollout_threads, self.num_agents, self.buffer.share_obs[step]),
+            _flatten(self.n_rollout_threads, self.num_agents, self.buffer.local_obs[step]),
+            _flatten(self.n_rollout_threads, self.num_agents, self.buffer.node_obs[step]),
+            _flatten(self.n_rollout_threads, self.num_agents, self.buffer.adj_obs[step]),
+            _flatten(self.n_rollout_threads, self.num_agents, self.buffer.rnn_states_actor[step]),
+            _flatten(self.n_rollout_threads, self.num_agents, self.buffer.rnn_states_critic[step]),
+            _flatten(self.n_rollout_threads, self.num_agents, self.buffer.done_masks[step])
+            
         )
         # [self.envs, agents, dim]
         values = np.array(np.split(_t2n(value), self.n_rollout_threads))
@@ -217,12 +225,17 @@ class GMPERunner(Runner):
         next_val_pred = self.trainer.policy.get_values(
             # drop one dimention for batch computation
             # from (threads, n_agents, *data_shape) -> (threads * n_agents, *data_shape)
-            np.concatenate(self.buffer.share_obs[-1]),
-            np.concatenate(self.buffer.node_obs[-1]),
-            np.concatenate(self.buffer.adj_obs[-1]),
+            _flatten(self.n_rollout_threads, self.num_agents, self.buffer.share_obs[-1]),
+            _flatten(self.n_rollout_threads, self.num_agents, self.buffer.node_obs[-1]),
+            _flatten(self.n_rollout_threads, self.num_agents, self.buffer.adj_obs[-1]),
+            _flatten(self.n_rollout_threads, self.num_agents, self.buffer.rnn_states_critic[-1]),
+            _flatten(self.n_rollout_threads, self.num_agents, self.buffer.done_masks[-1])
+            # np.concatenate(self.buffer.share_obs[-1]),
+            # np.concatenate(self.buffer.node_obs[-1]),
+            # np.concatenate(self.buffer.adj_obs[-1]),
             # np.concatenate(self.buffer.share_agent_id[-1]),
-            np.concatenate(self.buffer.rnn_states_critic[-1]),
-            np.concatenate(self.buffer.done_masks[-1]),
+            # np.concatenate(self.buffer.rnn_states_critic[-1]),
+            # np.concatenate(self.buffer.done_masks[-1]),
         )
         # put back thread dimension
         next_val_pred = np.array(np.split(_t2n(next_val_pred), self.n_rollout_threads))
