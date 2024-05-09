@@ -37,9 +37,6 @@ class GNN(nn.Module):
         # return (threads * n_agent, x_agg_out)
 
 
-        
-
-
     def parse_adj(adj: torch.Tensor, sensing_radius: float):
         assert adj.dim() == 2
         
