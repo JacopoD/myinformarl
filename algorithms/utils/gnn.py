@@ -6,19 +6,16 @@ from torch_geometric.nn import MessagePassing, global_mean_pool
 from torch_geometric.utils import softmax
 
 class GNN(nn.Module):
-    def __init__(self) -> None:
+    def __init__(self, in_features, out_features) -> None:
         super().__init__()
 
-        self.information_aggregation = UniMPGNN(
-            3 * self.dim + 3,  # (rel_pos, vel, rel_goal) * self.dim + entity embedding
-            agg_out_channels
+        self.batched_aggregation = UniMPGNN(
+            in_features,  # (rel_pos, vel, rel_goal) * self.dim + entity embedding
+            out_features
         )
     
 
-        pass
-    
-
-    def forward(self, node_obs: torch.Tensor, adj: torch.Tensor):
+    def forward(self, node_obs: torch.Tensor, adj: torch.Tensor, n_agents, threads):
         # adj = (threads * n_agent, entities, entities)
         # node_obs = (threads * n_agent, n_entities, x_j_shape)
 
@@ -34,6 +31,7 @@ class GNN(nn.Module):
         # x, edge_index, edge_attr = data.x, data.edge_index, data.edge_attr
         # batch = data.batch
 
+        return self.batched_aggregation(batch, n_agents, threads)
         # return (threads * n_agent, x_agg_out)
 
 
@@ -95,23 +93,23 @@ class UniMPGNN(nn.Module):
         super(UniMPGNN, self).__init__()
         self.layer = UniMPLayer(in_channels, out_channels, heads)
 
-    def forward(self, batch_data):
+    def forward(self, batch_data, n_agents, threads):
         x, edge_index, edge_attr = batch_data.x, batch_data.edge_index, batch_data.edge_attr
-        
-        batch_size = batch_data.num_graphs
 
-        print("x size", x.size())
-        print("batch size", batch_size)
-
-        # Handle batched graph data
+        # batched graph data
         node_out = self.layer(x, edge_index, edge_attr, size=(x.size(0), x.size(0)))
         
-        # Optionally, pool node features per graph if you need graph-level predictions
-        graph_out = global_mean_pool(node_out, batch_data.batch)
+        # pool node features per graph for graph-level predictions 
+        # (aggregation of all entities)
+        #  graph_out = global_mean_pool(node_out, batch_data.batch)
+        
+        # get the ith row of the matrix features, where i is the agent
+        # for which we are interested to extract the feature vector
+        idx = torch.arange(n_agents).repeat(threads)
+        graph_out = node_out[:, idx]
 
         # node_out = (threads * n_agent, n_entities, x_j_shape)
         # (threads * n_agent, x_j_shape)
         
         return graph_out  # If node-level output is needed, return `node_out` instead
 
-# You can use this module by creating a `DataLoader` with `Batch` objects from PyTorch Geometric.
