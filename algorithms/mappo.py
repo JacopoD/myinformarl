@@ -266,6 +266,8 @@ class R_MAPPO:
         for _ in range(self.ppo_epoch):
             data_generator = buffer.generator(advantages, self.num_mini_batch)
 
+            raise NotImplementedError
+
             for sample in data_generator:
                 (
                     value_loss,

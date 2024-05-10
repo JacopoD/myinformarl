@@ -11,7 +11,7 @@ from algorithms.utils.rnn import RNNLayer
 from algorithms.utils.act import ACTLayer
 from algorithms.utils.popart import PopArt
 from algorithms.utils.gnn import GNN
-from utils.util import get_shape_from_obs_space
+from utils.utils import get_shape_from_obs_space
 
 
 class GraphActor(nn.Module):
@@ -19,36 +19,49 @@ class GraphActor(nn.Module):
     Actor network class for MAPPO. Outputs actions given observations.
     """
 
-    def __init__(self, config) -> None:
+    def __init__(
+        self, config, observation_shape, x_agg_shape, x_agg_out, action_space, device
+    ) -> None:
         super(GraphActor, self).__init__()
 
-        gnn = GNN(...)
+        self.device = device
 
-        mlp_input_dim = gnn.out_dim + observation.shape
+        # actor gnn does not aggregate global graph features
+        self.gnn = GNN(x_agg_shape, x_agg_out, False, sensing_radius=config.max_edge_dist)
+
+        mlp_input_dim = self.gnn.out_features + observation_shape
 
         self.mlp = MLPBase(args=config, input_dim=mlp_input_dim)
 
         self.rnn = RNNLayer(
-            self.hidden_size,
-            self.hidden_size,
-            self._recurrent_N,
-            self._use_orthogonal,
+            config.hidden_size,
+            config.hidden_size,
+            config.recurrent_N,
+            config.use_orthogonal,
         )
 
         self.act = ACTLayer(
-            "Discrete", self.hidden_size, self._use_orthogonal, self._gain
+            action_space, config.hidden_size, config.use_orthogonal, config.gain
         )
-        pass
 
-    def forward(self, local_obs, node_obs, adj, ) -> Tuple[Tensor, Tensor, Tensor]:
+        self.to(self.device)
+
+    def forward(
+        self, local_obs, node_obs, adj, agent_ids, rnn_states, masks
+    ) -> Tuple[Tensor, Tensor, Tensor]:
         """
         Compute actions from the given inputs.
         """
 
-        neighbour_features = self.gnn(node_obs, adj, n_agents, threads???)
+        adj = torch.from_numpy(adj).to(torch.float32).to(self.device)
+        local_obs = torch.from_numpy(local_obs).to(torch.float32).to(self.device)
+        node_obs = torch.from_numpy(node_obs).to(torch.float32).to(self.device)
+        agent_ids = torch.from_numpy(agent_ids).to(torch.float32).to(self.device)
+        rnn_states = torch.from_numpy(rnn_states).to(torch.float32).to(self.device)
+        masks = torch.from_numpy(masks).to(torch.float32).to(self.device)
 
-        actor_features = torch.cat([local_obs, nbd_features], dim=1)
-
+        agg_nb_features = self.gnn(node_obs, adj, agent_ids=agent_ids)
+        actor_features = torch.cat([local_obs, agg_nb_features], dim=1)
         actor_features = self.mlp(actor_features)
 
         actor_features, rnn_states = self.rnn(actor_features, rnn_states, masks)
@@ -62,18 +75,20 @@ class GraphActor(nn.Module):
         Compute log probability and entropy of given actions.
         """
 
-        nbd_features = self.gnn_base(node_obs, adj, agent_id)
-        actor_features = torch.cat([obs, nbd_features], dim=1)
-        actor_features = self.base(actor_features)
+        pass
 
-        actor_features, rnn_states = self.rnn(actor_features, rnn_states, masks)
+        # nbd_features = self.gnn_base(node_obs, adj, agent_id)
+        # actor_features = torch.cat([obs, nbd_features], dim=1)
+        # actor_features = self.base(actor_features)
 
-        action_log_probs, dist_entropy = self.act.evaluate_actions(
-            actor_features,
-            action
-        )
+        # actor_features, rnn_states = self.rnn(actor_features, rnn_states, masks)
 
-        return (action_log_probs, dist_entropy)
+        # action_log_probs, dist_entropy = self.act.evaluate_actions(
+        #     actor_features,
+        #     action
+        # )
+
+        # return (action_log_probs, dist_entropy)
 
 
 class GraphCritic(nn.Module):
@@ -82,12 +97,43 @@ class GraphCritic(nn.Module):
     given centralized input (MAPPO) or local observations (IPPO).
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self, config, observation_shape, x_agg_shape, x_agg_out, device
+    ) -> None:
         super(GraphCritic, self).__init__()
-        pass
 
-    def forward(self) -> Tuple[Tensor, Tensor]:
-        """
-        Compute actions from the given inputs.
-        """
-        pass
+        self.device = device
+
+        # critic gnn aggregates global graph features
+        self.gnn = GNN(x_agg_shape, x_agg_out, True, sensing_radius=config.max_edge_dist)
+
+        mlp_input_dim = self.gnn.out_features + observation_shape
+
+        self.mlp = MLPBase(args=config, input_dim=mlp_input_dim)
+
+        self.rnn = RNNLayer(
+            config.hidden_size,
+            config.hidden_size,
+            config.recurrent_N,
+            config.use_orthogonal,
+        )
+
+        # self.v_out = nn.init.orthogonal_(nn.Linear(config.hidden_size, 1))
+        self.v_out = nn.Linear(config.hidden_size, 1)
+        self.v_out = nn.init.orthogonal_(self.v_out.weight)
+        self.to(device)
+
+    def forward(self, node_obs, adj, rnn_states, masks):
+        
+        node_obs = torch.from_numpy(node_obs).to(torch.float32).to(self.device)
+        adj = torch.from_numpy(adj).to(torch.float32).to(self.device)
+        rnn_states = torch.from_numpy(rnn_states).to(torch.float32).to(self.device)
+        masks = torch.from_numpy(masks).to(torch.float32).to(self.device)
+
+        agg_nb_features = self.gnn(node_obs, adj)
+        critic_features = self.mlp(agg_nb_features)
+
+        critic_features, rnn_states = self.rnn(critic_features, rnn_states, masks)
+        values = self.v_out(critic_features)
+
+        return (values, rnn_states)

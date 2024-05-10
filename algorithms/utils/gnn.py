@@ -6,16 +6,21 @@ from torch_geometric.nn import MessagePassing, global_mean_pool
 from torch_geometric.utils import softmax
 
 class GNN(nn.Module):
-    def __init__(self, in_features, out_features) -> None:
+    def __init__(self, in_features, out_features, aggregate, sensing_radius) -> None:
         super().__init__()
+
+        self.out_features = out_features
+
+        self.sensing_radius = sensing_radius
 
         self.batched_aggregation = UniMPGNN(
             in_features,  # (rel_pos, vel, rel_goal) * self.dim + entity embedding
-            out_features
+            out_features,
+            aggregate
         )
     
 
-    def forward(self, node_obs: torch.Tensor, adj: torch.Tensor, n_agents, threads):
+    def forward(self, node_obs: torch.Tensor, adj: torch.Tensor, agent_ids=None):
         # adj = (threads * n_agent, entities, entities)
         # node_obs = (threads * n_agent, n_entities, x_j_shape)
 
@@ -31,14 +36,14 @@ class GNN(nn.Module):
         # x, edge_index, edge_attr = data.x, data.edge_index, data.edge_attr
         # batch = data.batch
 
-        return self.batched_aggregation(batch, n_agents, threads)
+        return self.batched_aggregation(batch, agent_ids=agent_ids)
         # return (threads * n_agent, x_agg_out)
 
 
-    def parse_adj(adj: torch.Tensor, sensing_radius: float):
+    def parse_adj(self, adj: torch.Tensor):
         assert adj.dim() == 2
         
-        masks = ((adj < sensing_radius) * (adj > 0)).to(torch.float64)
+        masks = ((adj < self.sensing_radius) * (adj > 0)).to(torch.float32)
 
         adj_masked = masks * adj
 
@@ -66,7 +71,7 @@ class UniMPLayer(MessagePassing):
         self.w4 = nn.Linear(in_channels, out_channels)
         self.w5 = nn.Linear(1, out_channels)  # Assuming edge features are 1-dimensional
 
-        self.sqrt_d = torch.sqrt(torch.tensor(out_channels, dtype=torch.float))
+        self.sqrt_d = torch.sqrt(torch.tensor(out_channels, dtype=torch.float32))
 
     def forward(self, x, edge_index, edge_attr, size=None):
         # Start propagating messages
@@ -89,27 +94,28 @@ class UniMPLayer(MessagePassing):
 
 
 class UniMPGNN(nn.Module):
-    def __init__(self, in_channels, out_channels, heads=1):
+    def __init__(self, in_channels, out_channels, aggregate, heads=1):
         super(UniMPGNN, self).__init__()
         self.layer = UniMPLayer(in_channels, out_channels, heads)
+        self.aggregate = aggregate
 
-    def forward(self, batch_data, n_agents, threads):
+    def forward(self, batch_data, agent_ids=None):
         x, edge_index, edge_attr = batch_data.x, batch_data.edge_index, batch_data.edge_attr
 
         # batched graph data
         node_out = self.layer(x, edge_index, edge_attr, size=(x.size(0), x.size(0)))
         
-        # pool node features per graph for graph-level predictions 
-        # (aggregation of all entities)
-        #  graph_out = global_mean_pool(node_out, batch_data.batch)
+        if self.aggregate:
+            # pool node features per graph for graph-level predictions 
+            # (aggregation of all entities)
+            return global_mean_pool(node_out, batch_data.batch)
         
-        # get the ith row of the matrix features, where i is the agent
-        # for which we are interested to extract the feature vector
-        idx = torch.arange(n_agents).repeat(threads)
-        graph_out = node_out[:, idx]
+        else:
+            # get the ith row of the matrix features, where i is the agent
+            # for which we are interested to extract the feature vector
+            return node_out[:, agent_ids]
 
         # node_out = (threads * n_agent, n_entities, x_j_shape)
         # (threads * n_agent, x_j_shape)
         
-        return graph_out  # If node-level output is needed, return `node_out` instead
 

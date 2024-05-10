@@ -28,34 +28,37 @@ class ACTLayer(nn.Module):
         self.mixed_action = False
         self.multi_discrete = False
 
-        if action_space.__class__.__name__ == "Discrete":
-            action_dim = action_space.n
-            self.action_out = Categorical(inputs_dim, action_dim, use_orthogonal, gain)
-        elif action_space.__class__.__name__ == "Box":
-            action_dim = action_space.shape[0]
-            self.action_out = DiagGaussian(inputs_dim, action_dim, use_orthogonal, gain)
-        elif action_space.__class__.__name__ == "MultiBinary":
-            action_dim = action_space.shape[0]
-            self.action_out = Bernoulli(inputs_dim, action_dim, use_orthogonal, gain)
-        elif action_space.__class__.__name__ == "MultiDiscrete":
-            self.multi_discrete = True
-            action_dims = action_space.high - action_space.low + 1
-            self.action_outs = []
-            for action_dim in action_dims:
-                self.action_outs.append(
-                    Categorical(inputs_dim, action_dim, use_orthogonal, gain)
-                )
-            self.action_outs = nn.ModuleList(self.action_outs)
-        else:  # discrete + continous
-            self.mixed_action = True
-            continous_dim = action_space[0].shape[0]
-            discrete_dim = action_space[1].n
-            self.action_outs = nn.ModuleList(
-                [
-                    DiagGaussian(inputs_dim, continous_dim, use_orthogonal, gain),
-                    Categorical(inputs_dim, discrete_dim, use_orthogonal, gain),
-                ]
-            )
+        action_dim = action_space
+        self.action_out = Categorical(inputs_dim, action_dim, use_orthogonal, gain)
+
+        # if action_space.__class__.__name__ == "Discrete":
+        #     action_dim = action_space.n
+        #     self.action_out = Categorical(inputs_dim, action_dim, use_orthogonal, gain)
+        # elif action_space.__class__.__name__ == "Box":
+        #     action_dim = action_space.shape[0]
+        #     self.action_out = DiagGaussian(inputs_dim, action_dim, use_orthogonal, gain)
+        # elif action_space.__class__.__name__ == "MultiBinary":
+        #     action_dim = action_space.shape[0]
+        #     self.action_out = Bernoulli(inputs_dim, action_dim, use_orthogonal, gain)
+        # elif action_space.__class__.__name__ == "MultiDiscrete":
+        #     self.multi_discrete = True
+        #     action_dims = action_space.high - action_space.low + 1
+        #     self.action_outs = []
+        #     for action_dim in action_dims:
+        #         self.action_outs.append(
+        #             Categorical(inputs_dim, action_dim, use_orthogonal, gain)
+        #         )
+        #     self.action_outs = nn.ModuleList(self.action_outs)
+        # else:  # discrete + continous
+        #     self.mixed_action = True
+        #     continous_dim = action_space[0].shape[0]
+        #     discrete_dim = action_space[1].n
+        #     self.action_outs = nn.ModuleList(
+        #         [
+        #             DiagGaussian(inputs_dim, continous_dim, use_orthogonal, gain),
+        #             Categorical(inputs_dim, discrete_dim, use_orthogonal, gain),
+        #         ]
+        #     )
 
     def forward(
         self,

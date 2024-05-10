@@ -51,7 +51,7 @@ class GMPERunner(Runner):
                 rnn_states_critic = None
 
                 # Obs reward and next obs
-                obs, agent_id, node_obs, adj, rewards, dones, infos = self.envs.step(
+                obs, agent_ids, node_obs, adj, rewards, dones, infos = self.envs.step(
                     actions_env
                 )
 
@@ -74,6 +74,7 @@ class GMPERunner(Runner):
                     dones=dones,
                     rnn_states_actor=rnn_states_actor,
                     rnn_states_critic=rnn_states_critic,
+                    agent_ids=agent_ids
                 )
 
 
@@ -119,14 +120,14 @@ class GMPERunner(Runner):
         self.buffer.local_obs[0] = self.buffer.local_obs[-1].copy()
         self.buffer.node_obs[0] = self.buffer.node_obs[-1].copy()
         self.buffer.adj_obs[0] = self.buffer.adj_obs[-1].copy()
-        # self.buffer.agent_id[0] = self.buffer.agent_id[-1].copy()
+        self.buffer.agent_ids[0] = self.buffer.agent_ids[-1].copy()
         # self.buffer.share_agent_id[0] = self.buffer.share_agent_id[-1].copy()
         self.buffer.rnn_states_actor[0] = self.buffer.rnn_states_actor[-1].copy()
         self.buffer.rnn_states_critic[0] = self.buffer.rnn_states_critic[-1].copy()
         self.buffer.done_masks[0] = self.buffer.done_masks[-1].copy()
 
     def warmup(self):
-        obs, agent_id, node_obs, adj = self.envs.reset()
+        obs, agent_ids, node_obs, adj = self.envs.reset()
 
         if self.use_centralized_V:
             # (n_rollout_threads, n_agents, feats) -> (n_rollout_threads, n_agents*feats)
@@ -148,7 +149,7 @@ class GMPERunner(Runner):
         self.buffer.node_obs[0] = node_obs.copy()
         self.buffer.share_obs[0] = share_obs.copy()
         self.buffer.adj_obs[0] = adj.copy()
-        # self.buffer.agent_id[0] = agent_id.copy()
+        self.buffer.agent_ids[0] = agent_ids.copy()
         # self.buffer.share_agent_id[0] = share_agent_id.copy()
 
     @torch.no_grad()
@@ -161,22 +162,14 @@ class GMPERunner(Runner):
             rnn_states,
             rnn_states_critic,
         ) = self.trainer.policy.get_actions(
-            # np.concatenate(self.buffer.share_obs[step]),
-            # np.concatenate(self.buffer.local_obs[step]),
-            # np.concatenate(self.buffer.node_obs[step]),
-            # np.concatenate(self.buffer.adj_obs[step]),
-            # np.concatenate(self.buffer.agent_id[step]),
-            # np.concatenate(self.buffer.share_agent_id[step]),
-            # np.concatenate(self.buffer.rnn_states_actor[step]),
-            # np.concatenate(self.buffer.rnn_states_critic[step]),
-            # np.concatenate(self.buffer.done_masks[step]),
             _flatten(self.n_rollout_threads, self.num_agents, self.buffer.share_obs[step]),
             _flatten(self.n_rollout_threads, self.num_agents, self.buffer.local_obs[step]),
             _flatten(self.n_rollout_threads, self.num_agents, self.buffer.node_obs[step]),
             _flatten(self.n_rollout_threads, self.num_agents, self.buffer.adj_obs[step]),
             _flatten(self.n_rollout_threads, self.num_agents, self.buffer.rnn_states_actor[step]),
             _flatten(self.n_rollout_threads, self.num_agents, self.buffer.rnn_states_critic[step]),
-            _flatten(self.n_rollout_threads, self.num_agents, self.buffer.done_masks[step])
+            _flatten(self.n_rollout_threads, self.num_agents, self.buffer.done_masks[step]),
+            _flatten(self.n_rollout_threads, self.num_agents, self.buffer.agent_ids[step])
             
         )
         # [self.envs, agents, dim]
@@ -225,17 +218,12 @@ class GMPERunner(Runner):
         next_val_pred = self.trainer.policy.get_values(
             # drop one dimention for batch computation
             # from (threads, n_agents, *data_shape) -> (threads * n_agents, *data_shape)
-            _flatten(self.n_rollout_threads, self.num_agents, self.buffer.share_obs[-1]),
+            # _flatten(self.n_rollout_threads, self.num_agents, self.buffer.share_obs[-1]),
             _flatten(self.n_rollout_threads, self.num_agents, self.buffer.node_obs[-1]),
             _flatten(self.n_rollout_threads, self.num_agents, self.buffer.adj_obs[-1]),
             _flatten(self.n_rollout_threads, self.num_agents, self.buffer.rnn_states_critic[-1]),
-            _flatten(self.n_rollout_threads, self.num_agents, self.buffer.done_masks[-1])
-            # np.concatenate(self.buffer.share_obs[-1]),
-            # np.concatenate(self.buffer.node_obs[-1]),
-            # np.concatenate(self.buffer.adj_obs[-1]),
-            # np.concatenate(self.buffer.share_agent_id[-1]),
-            # np.concatenate(self.buffer.rnn_states_critic[-1]),
-            # np.concatenate(self.buffer.done_masks[-1]),
+            _flatten(self.n_rollout_threads, self.num_agents, self.buffer.done_masks[-1]),
+            # _flatten(self.n_rollout_threads, self.num_agents, self.buffer.agent_ids[-1])
         )
         # put back thread dimension
         next_val_pred = np.array(np.split(_t2n(next_val_pred), self.n_rollout_threads))

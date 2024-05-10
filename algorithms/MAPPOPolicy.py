@@ -2,7 +2,7 @@ import torch
 from torch import Tensor
 from typing import Tuple
 import argparse
-from algorithms.actor_critic import R_Actor, R_Critic
+from algorithms.graph_actor_critic import GraphActor, GraphCritic
 from utils.utils import update_linear_schedule
 
 
@@ -26,7 +26,8 @@ class R_MAPPOPolicy:
 
     def __init__(
         self,
-        args: argparse.Namespace,
+        # args: argparse.Namespace,
+        config,
         local_obs_space,
         share_obs_space,
         node_obs_space,
@@ -34,10 +35,10 @@ class R_MAPPOPolicy:
         device=torch.device("cpu"),
     ) -> None:
         self.device = device
-        self.lr = args.lr
-        self.critic_lr = args.critic_lr
-        self.opti_eps = args.opti_eps
-        self.weight_decay = args.weight_decay
+        self.lr = config.lr
+        self.critic_lr = config.critic_lr
+        self.opti_eps = config.opti_eps
+        self.weight_decay = config.weight_decay
 
         self.local_obs_space = local_obs_space
         self.share_obs_space = share_obs_space
@@ -45,8 +46,24 @@ class R_MAPPOPolicy:
 
         self.act_space = act_space
 
-        self.actor = R_Actor(args, self.local_obs_space, self.act_space, self.device)
-        self.critic = R_Critic(args, self.share_obs_space, self.device)
+        print(self.local_obs_space, self.share_obs_space, self.node_obs_space)
+
+        self.actor = GraphActor(
+            config=config,
+            observation_shape=self.local_obs_space[0],
+            x_agg_shape=self.node_obs_space[1],
+            x_agg_out=16,
+            action_space=act_space,
+            device=self.device,
+        )
+
+        self.critic = GraphCritic(
+            config=config,
+            observation_shape=self.share_obs_space[0],
+            x_agg_shape=self.node_obs_space[1],
+            x_agg_out=16,
+            device=self.device,
+        )
 
         self.actor_optimizer = torch.optim.Adam(
             self.actor.parameters(),
@@ -59,17 +76,18 @@ class R_MAPPOPolicy:
             lr=self.critic_lr,
             eps=self.opti_eps,
             weight_decay=self.weight_decay,
-        ) 
+        )
 
     def get_actions(
         self,
         share_obs,
         local_obs,
-        node_obs, 
+        node_obs,
         adj_obs,
         rnn_states_actor,
         rnn_states_critic,
         masks,
+        agent_ids,
         available_actions=None,
         deterministic=False,
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
@@ -104,7 +122,14 @@ class R_MAPPOPolicy:
             updated critic network RNN states.
         """
         actions, action_log_probs, rnn_states_actor = self.actor.forward(
-            local_obs, node_obs, adj_obs, rnn_states_actor, masks, available_actions, deterministic
+            local_obs,
+            node_obs,
+            adj_obs,
+            rnn_states_actor,
+            masks,
+            agent_ids,
+            # available_actions,
+            # deterministic,
         )
 
         values, rnn_states_critic = self.critic.forward(
@@ -112,7 +137,9 @@ class R_MAPPOPolicy:
         )
         return (values, actions, action_log_probs, rnn_states_actor, rnn_states_critic)
 
-    def get_values(self, share_obs, node_obs, adj_obs, rnn_states_critic, masks) -> Tensor:
+    def get_values(
+        self, node_obs, adj_obs, rnn_states_critic, masks
+    ) -> Tensor:
         """
         Get value function predictions.
         share_obs (np.ndarray):
@@ -124,7 +151,7 @@ class R_MAPPOPolicy:
 
         :return values: (torch.Tensor) value function predictions.
         """
-        values, _ = self.critic.forward(share_obs, node_obs, adj_obs, rnn_states_critic, masks)
+        values, _ = self.critic.forward(node_obs, adj_obs, rnn_states_critic, masks)
         return values
 
     def evaluate_actions(
@@ -169,14 +196,30 @@ class R_MAPPOPolicy:
             action distribution entropy for the given inputs.
         """
         action_log_probs, dist_entropy = self.actor.evaluate_actions(
-            local_obs, node_obs, adj_obs, rnn_states_actor, action, masks, available_actions, active_masks
+            local_obs,
+            node_obs,
+            adj_obs,
+            rnn_states_actor,
+            action,
+            masks,
+            available_actions,
+            active_masks,
         )
 
-        values, _ = self.critic.forward(share_obs, node_obs, adj_obs, rnn_states_critic, masks)
+        values, _ = self.critic.forward(
+            share_obs, node_obs, adj_obs, rnn_states_critic, masks
+        )
         return values, action_log_probs, dist_entropy
 
     def act(
-        self, local_obs, node_obs, adj_obs, rnn_states_actor, masks, available_actions=None, deterministic=False
+        self,
+        local_obs,
+        node_obs,
+        adj_obs,
+        rnn_states_actor,
+        masks,
+        available_actions=None,
+        deterministic=False,
     ) -> Tuple[Tensor, Tensor]:
         """
         Compute actions using the given inputs.
@@ -194,6 +237,12 @@ class R_MAPPOPolicy:
             distribution or should be sampled.
         """
         actions, _, rnn_states_actor = self.actor.forward(
-            local_obs, node_obs, adj_obs, rnn_states_actor, masks, available_actions, deterministic
+            local_obs,
+            node_obs,
+            adj_obs,
+            rnn_states_actor,
+            masks,
+            available_actions,
+            deterministic,
         )
         return actions, rnn_states_actor

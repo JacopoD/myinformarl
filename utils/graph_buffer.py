@@ -41,6 +41,8 @@ class GReplayBuffer(object):
             (self.max_len, self.threads, self.n_agents, action_space)
         )
 
+        self.agent_ids = np.zeros((self.max_len, self.threads, self.n_agents, 1))
+
         self.rewards = np.zeros((self.max_len, self.threads, self.n_agents, 1))
 
         self.values = np.zeros((self.max_len, self.threads, self.n_agents, 1))
@@ -83,6 +85,7 @@ class GReplayBuffer(object):
         dones,
         rnn_states_actor,
         rnn_states_critic,
+        agent_ids,
     ):
         self.done_masks[self.pointer + 1] = np.ones((self.threads, self.n_agents, 1))
         self.done_masks[self.pointer + 1][dones] = np.zeros(((dones).sum(), 1))
@@ -103,8 +106,8 @@ class GReplayBuffer(object):
         self.adj_obs[self.pointer + 1] = adj_obs.copy()
         self.rewards[self.pointer + 1] = rewards.copy()
         self.actions[self.pointer + 1] = actions.copy()
+        self.agent_ids[self.pointer + 1] = agent_ids.copy()
         # self.values[self.pointer + 1] = values.copy()
-        # self.done_masks[self.pointer + 1] = done_masks
 
         self.pointer = (self.pointer + 1) % (self.max_len - 1)
 
@@ -139,7 +142,10 @@ class GReplayBuffer(object):
         values = self.values.reshape(-1, batch_size, 1)
         done_masks = self.done_masks.reshape(-1, batch_size, 1)
         cumulative_rewards = self.cumulative_rewards.reshape(-1, batch_size, 1)
+        
         advantages = advantages.reshape(-1, batch_size, 1)
+        
+        agent_ids = self.agent_ids.reshape(-1, batch_size, 1)
 
         for chunk in range(0, batch_size, chunk_len):
             share_obs_batch = []
@@ -153,6 +159,7 @@ class GReplayBuffer(object):
             done_masks_batch = []
             cumulative_rewards_batch = []
             advantages_batch = []
+            agent_ids_batch = []
 
             for offset in range(chunk_len):
                 idx = batch_perm[chunk + offset]
@@ -160,13 +167,14 @@ class GReplayBuffer(object):
                 local_obs_batch.append(local_obs[:-1, idx])
                 node_obs_batch.append(node_obs[:-1, idx])
                 adj_obs_batch.append(adj_obs[:-1, idx])
-                rnn_states_actor_batch.append(rnn_states_actor[:-1, idx])
-                rnn_states_critic_batch.append(rnn_states_critic[:-1, idx])
-                actions_batch.append(actions[:-1, idx])
+                rnn_states_actor_batch.append(rnn_states_actor[0:1, idx])
+                rnn_states_critic_batch.append(rnn_states_critic[0:1, idx])
+                actions_batch.append(actions[:, idx])
                 values_batch.append(values[:-1, idx])
                 done_masks_batch.append(done_masks[:-1, idx])
                 cumulative_rewards_batch.append(cumulative_rewards[:-1, idx])
                 advantages_batch.append(advantages[:, idx])
+                agent_ids_batch.append(agent_ids[:-1, idx])
 
             # (chunk_len, episode_length, *data_shape) --> (episode_length, chunk_len, *data_shape)
             share_obs_batch = np.stack(share_obs_batch, 1)
@@ -181,6 +189,7 @@ class GReplayBuffer(object):
             )
             actions_batch = np.stack(actions_batch, 1)
             values_batch = np.stack(values_batch, 1)
+            agent_ids_batch = np.stack(agent_ids_batch, 1)
             done_masks_batch = np.stack(done_masks_batch, 1)
             cumulative_rewards_batch = np.stack(cumulative_rewards_batch, 1)
             advantages_batch = np.stack(advantages_batch, 1)
@@ -197,6 +206,7 @@ class GReplayBuffer(object):
                 self.max_len - 1, chunk_len, cumulative_rewards_batch
             )
             advantages_batch = _flatten(self.max_len - 1, chunk_len, advantages_batch)
+            agent_ids_batch = _flatten(self.max_len - 1, chunk_len, agent_ids_batch)
 
             yield (
                 share_obs_batch,
@@ -210,4 +220,5 @@ class GReplayBuffer(object):
                 done_masks_batch,
                 cumulative_rewards_batch,
                 advantages_batch,
+                agent_ids_batch
             )

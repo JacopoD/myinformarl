@@ -6,10 +6,9 @@ import torch
 
 # from torch.utils.tensorboard import SummaryWriter
 from tensorboardX import SummaryWriter  # tensorboardX to work with macos
-from utils.shared_buffer import SharedReplayBuffer
 from utils.graph_buffer import GReplayBuffer
-from algorithms.MAPPOPolicy import R_MAPPOPolicy as Policy
-from algorithms.mappo import R_MAPPO as TrainAlgo
+from algorithms.MAPPOPolicy import R_MAPPOPolicy
+from algorithms.mappo import R_MAPPO
 
 class Runner(object):
     """
@@ -94,11 +93,12 @@ class Runner(object):
         #         device=self.device,
         #     )
         # else:
-        self.policy = Policy(
-            self.config,
-            self.envs.observation_space[0],
-            share_observation_space,
-            self.envs.action_space[0],
+        self.policy = R_MAPPOPolicy(
+            config=self.config,
+            local_obs_space=self.envs.observation_space[0].shape,
+            share_obs_space=share_observation_space.shape,
+            node_obs_space=self.envs.node_observation_space[0].shape,
+            act_space=self.envs.action_space[0].n,
             device=self.device,
         )
 
@@ -108,7 +108,7 @@ class Runner(object):
             self.gif_dir = self.model_dir
 
         # algorithm
-        self.trainer = TrainAlgo(self.config, self.policy, device=self.device)
+        self.trainer = R_MAPPO(self.config, self.policy, device=self.device)
 
         # buffer
         # if self.config.env_name == "GraphMPE":
