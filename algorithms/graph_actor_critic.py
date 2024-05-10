@@ -22,8 +22,7 @@ class GraphActor(nn.Module):
     def __init__(self, config) -> None:
         super(GraphActor, self).__init__()
 
-
-        gnn = GNN()
+        gnn = GNN(...)
 
         mlp_input_dim = gnn.out_dim + observation.shape
 
@@ -41,22 +40,40 @@ class GraphActor(nn.Module):
         )
         pass
 
-    def forward(self) -> Tuple[Tensor, Tensor, Tensor]:
+    def forward(self, local_obs, node_obs, adj, ) -> Tuple[Tensor, Tensor, Tensor]:
         """
         Compute actions from the given inputs.
         """
 
+        neighbour_features = self.gnn(node_obs, adj, n_agents, threads???)
+
+        actor_features = torch.cat([local_obs, nbd_features], dim=1)
+
+        actor_features = self.mlp(actor_features)
+
         actor_features, rnn_states = self.rnn(actor_features, rnn_states, masks)
 
-        actions, action_log_probs = self.act(
-            actor_features, available_actions, deterministic
-        )
-        pass
+        actions, action_log_probs = self.act(actor_features)
+
+        return (actions, action_log_probs, rnn_states)
 
     def evaluate_actions(self) -> Tuple[Tensor, Tensor]:
         """
         Compute log probability and entropy of given actions.
         """
+
+        nbd_features = self.gnn_base(node_obs, adj, agent_id)
+        actor_features = torch.cat([obs, nbd_features], dim=1)
+        actor_features = self.base(actor_features)
+
+        actor_features, rnn_states = self.rnn(actor_features, rnn_states, masks)
+
+        action_log_probs, dist_entropy = self.act.evaluate_actions(
+            actor_features,
+            action
+        )
+
+        return (action_log_probs, dist_entropy)
 
 
 class GraphCritic(nn.Module):
