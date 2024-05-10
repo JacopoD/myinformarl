@@ -26,10 +26,9 @@ class R_MAPPO:
         self,
         args: argparse.Namespace,
         policy: R_MAPPOPolicy,
-        device=torch.device("cpu"),
+        device,
     ) -> None:
         self.device = device
-        self.tpdv = dict(dtype=torch.float32, device=device)
         self.policy = policy
 
         self.clip_param = args.clip_param
@@ -140,6 +139,7 @@ class R_MAPPO:
         :return imp_weights: (torch.Tensor)
             importance sampling weights.
         """
+        
         (
             share_obs_batch,
             local_obs_batch,
@@ -152,23 +152,28 @@ class R_MAPPO:
             done_masks_batch,
             cumulative_rewards_batch,
             advantages_batch,
-        ) = sample
+            agent_ids_batch,
+            old_action_log_probs_batch
+        ) = [torch.from_numpy(e).to(torch.float32).to(self.device) for e in sample]
 
-        old_action_log_probs_batch = check(old_action_log_probs_batch).to(**self.tpdv)
-        advantages_batch = check(advantages_batch).to(**self.tpdv)
-        values_batch = check(values_batch).to(**self.tpdv)
-        cumulative_rewards_batch = check(cumulative_rewards_batch).to(**self.tpdv)
+        # old_action_log_probs_batch = torch.from_numpy(old_action_log_probs_batch).to(torch.float32).to(self.device)
+        # advantages_batch = torch.from_numpy(advantages_batch).to(torch.float32).to(self.device)
+        # values_batch = torch.from_numpy(values_batch).to(torch.float32).to(self.device)
+        # cumulative_rewards_batch = torch.from_numpy(cumulative_rewards_batch).to(torch.float32).to(self.device)
+        agent_ids_batch = agent_ids_batch.to(torch.int)
+        # adj_obs_batch = torch.from_numpy(adj_obs_batch).to(torch.float32).to(self.device)
 
         # Reshape to do in a single forward pass for all steps
         values, action_log_probs, dist_entropy = self.policy.evaluate_actions(
-            share_obs_batch,
-            local_obs_batch,
-            node_obs_batch,
-            adj_obs_batch,
-            rnn_states_actor_batch,
-            rnn_states_critic_batch,
-            actions_batch,
-            done_masks_batch,
+            share_obs=share_obs_batch,
+            local_obs=local_obs_batch,
+            node_obs=node_obs_batch,
+            adj_obs=adj_obs_batch,
+            rnn_states_actor=rnn_states_actor_batch,
+            rnn_states_critic=rnn_states_critic_batch,
+            actions=actions_batch,
+            masks=done_masks_batch,
+            agent_ids=agent_ids_batch
         )
         # actor update
         imp_weights = torch.exp(action_log_probs - old_action_log_probs_batch)
@@ -179,12 +184,6 @@ class R_MAPPO:
             * advantages_batch
         )
 
-        # if self._use_policy_active_masks:
-        #     policy_action_loss = (
-        #         -torch.sum(torch.min(surr1, surr2), dim=-1, keepdim=True)
-        #         * active_masks_batch
-        #     ).sum() / active_masks_batch.sum()
-        # else:
         policy_action_loss = -torch.sum(
             torch.min(surr1, surr2), dim=-1, keepdim=True
         ).mean()
@@ -265,8 +264,6 @@ class R_MAPPO:
 
         for _ in range(self.ppo_epoch):
             data_generator = buffer.generator(advantages, self.num_mini_batch)
-
-            raise NotImplementedError
 
             for sample in data_generator:
                 (

@@ -32,7 +32,7 @@ class R_MAPPOPolicy:
         share_obs_space,
         node_obs_space,
         act_space,
-        device=torch.device("cpu"),
+        device,
     ) -> None:
         self.device = device
         self.lr = config.lr
@@ -46,7 +46,7 @@ class R_MAPPOPolicy:
 
         self.act_space = act_space
 
-        print(self.local_obs_space, self.share_obs_space, self.node_obs_space)
+        # print(self.local_obs_space, self.share_obs_space, self.node_obs_space)
 
         self.actor = GraphActor(
             config=config,
@@ -122,24 +122,20 @@ class R_MAPPOPolicy:
             updated critic network RNN states.
         """
         actions, action_log_probs, rnn_states_actor = self.actor.forward(
-            local_obs,
-            node_obs,
-            adj_obs,
-            rnn_states_actor,
-            masks,
-            agent_ids,
-            # available_actions,
-            # deterministic,
+            local_obs=local_obs,
+            node_obs=node_obs,
+            adj=adj_obs,
+            agent_ids=agent_ids,
+            rnn_states=rnn_states_actor,
+            masks=masks,
         )
 
         values, rnn_states_critic = self.critic.forward(
-            share_obs, node_obs, adj_obs, rnn_states_critic, masks
+            node_obs=node_obs, adj=adj_obs, rnn_states=rnn_states_critic, masks=masks
         )
         return (values, actions, action_log_probs, rnn_states_actor, rnn_states_critic)
 
-    def get_values(
-        self, node_obs, adj_obs, rnn_states_critic, masks
-    ) -> Tensor:
+    def get_values(self, node_obs, adj_obs, rnn_states_critic, masks) -> Tensor:
         """
         Get value function predictions.
         share_obs (np.ndarray):
@@ -151,7 +147,9 @@ class R_MAPPOPolicy:
 
         :return values: (torch.Tensor) value function predictions.
         """
-        values, _ = self.critic.forward(node_obs, adj_obs, rnn_states_critic, masks)
+        values, _ = self.critic.forward(
+            node_obs=node_obs, adj=adj_obs, rnn_states=rnn_states_critic, masks=masks
+        )
         return values
 
     def evaluate_actions(
@@ -162,10 +160,9 @@ class R_MAPPOPolicy:
         adj_obs,
         rnn_states_actor,
         rnn_states_critic,
-        action,
+        actions,
         masks,
-        available_actions=None,
-        active_masks=None,
+        agent_ids
     ) -> Tuple[Tensor, Tensor, Tensor]:
         """
         Get action logprobs / entropy and
@@ -196,30 +193,22 @@ class R_MAPPOPolicy:
             action distribution entropy for the given inputs.
         """
         action_log_probs, dist_entropy = self.actor.evaluate_actions(
-            local_obs,
-            node_obs,
-            adj_obs,
-            rnn_states_actor,
-            action,
-            masks,
-            available_actions,
-            active_masks,
+            local_obs=local_obs,
+            node_obs=node_obs,
+            adj=adj_obs,
+            rnn_states=rnn_states_actor,
+            actions=actions,
+            masks=masks,
+            agent_ids=agent_ids
         )
 
         values, _ = self.critic.forward(
-            share_obs, node_obs, adj_obs, rnn_states_critic, masks
+            node_obs=node_obs, adj=adj_obs, rnn_states=rnn_states_critic, masks=masks
         )
         return values, action_log_probs, dist_entropy
 
     def act(
-        self,
-        local_obs,
-        node_obs,
-        adj_obs,
-        rnn_states_actor,
-        masks,
-        available_actions=None,
-        deterministic=False,
+        self, local_obs, node_obs, adj_obs, rnn_states_actor, masks, agent_ids
     ) -> Tuple[Tensor, Tensor]:
         """
         Compute actions using the given inputs.
@@ -237,12 +226,11 @@ class R_MAPPOPolicy:
             distribution or should be sampled.
         """
         actions, _, rnn_states_actor = self.actor.forward(
-            local_obs,
-            node_obs,
-            adj_obs,
-            rnn_states_actor,
-            masks,
-            available_actions,
-            deterministic,
+            local_obs=local_obs,
+            node_obs=node_obs,
+            adj=adj_obs,
+            rnn_states=rnn_states_actor,
+            masks=masks,
+            agent_ids=agent_ids,
         )
         return actions, rnn_states_actor

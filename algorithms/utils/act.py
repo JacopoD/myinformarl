@@ -215,6 +215,8 @@ class ACTLayer(nn.Module):
             dist_entropy = torch.tensor(dist_entropy).mean()
 
         else:
+            # print("x:", x.shape, x)
+            # print("action:", action.shape, action)
             action_logits = self.action_out(x, available_actions)
             action_log_probs = action_logits.log_probs(action)
             if active_masks is not None:

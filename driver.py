@@ -19,6 +19,8 @@ from multiagent.MPE_env import GraphMPEEnv
 
 
 def main():
+    
+
     config = local_config
 
     run_dir = setup_dirs(config)
@@ -95,17 +97,19 @@ def setup_dirs(config):
         print("_" * 50)
         print("Creating wandboard...")
         print("_" * 50)
+
+        cdict = dict(
+            [(a, b) for (a, b) in vars(local_config).items() if not a.startswith("__")]
+        )
         run = wandb.init(
-            config=config,
+            config=cdict,
             project=config.project_name,
             # project=config.env_name,
-            name=str(config.algorithm_name)
-            + "_"
-            + str(config.experiment_name)
+            name=str(config.experiment_name)
             + "_seed"
             + str(config.seed),
             # group=config.scenario_name,
-            dir=str(run_dir),
+            # dir=str(run_dir),
         )
     else:
         if not run_dir.exists():

@@ -3,11 +3,12 @@ env_name = "MPE"
 scenario_name = "navigation_graph"
 algorithm_name = "rmappo"
 experiment_name = "aaa"
+project_name = "informarl"
 use_centralized_V = True
 use_obs_instead_of_state = False
-num_env_steps = 10000
+num_env_steps = 2000000
 n_rollout_threads = 2
-n_eval_rollout_threads = 1
+n_eval_rollout_threads = 2
 n_render_rollout_threads = 5
 use_linear_lr_decay = False
 hidden_size = 64
@@ -84,11 +85,9 @@ use_comm = False
 
 # interval
 save_interval = 100000000
-use_eval = False
-eval_interval = 100000000
-log_interval = 1
-
-use_wandb = False
+use_eval = True
+eval_interval = 10000
+log_interval = 10
 
 # dir
 model_dir = None

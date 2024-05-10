@@ -23,20 +23,19 @@ class GNN(nn.Module):
     def forward(self, node_obs: torch.Tensor, adj: torch.Tensor, agent_ids=None):
         # adj = (threads * n_agent, entities, entities)
         # node_obs = (threads * n_agent, n_entities, x_j_shape)
-
         data = []
         for i in range(adj.shape[0]):
             edge_index, edge_attr = self.parse_adj(adj[i])
             data.append(
-                Data(x=node_obs[i], edge_index=edge_index, edge_attr=edge_attr)
+                Data(x=node_obs[i], edge_index=edge_index, edge_attr=edge_attr.unsqueeze(1))
             )
         
         loader = DataLoader(data, shuffle=False, batch_size=adj.shape[0])
         batch = next(iter(loader))
         # x, edge_index, edge_attr = data.x, data.edge_index, data.edge_attr
         # batch = data.batch
-
-        return self.batched_aggregation(batch, agent_ids=agent_ids)
+        
+        return self.batched_aggregation(batch, adj.shape, agent_ids=agent_ids)
         # return (threads * n_agent, x_agg_out)
 
 
@@ -97,13 +96,17 @@ class UniMPGNN(nn.Module):
     def __init__(self, in_channels, out_channels, aggregate, heads=1):
         super(UniMPGNN, self).__init__()
         self.layer = UniMPLayer(in_channels, out_channels, heads)
+        self.out_channels = out_channels
         self.aggregate = aggregate
 
-    def forward(self, batch_data, agent_ids=None):
+    def forward(self, batch_data, adj_size, agent_ids=None):
         x, edge_index, edge_attr = batch_data.x, batch_data.edge_index, batch_data.edge_attr
+
+        # print("UniMPGNN forward:", x.shape, edge_index.shape, edge_attr.shape)
 
         # batched graph data
         node_out = self.layer(x, edge_index, edge_attr, size=(x.size(0), x.size(0)))
+        # print("node_out:", node_out.shape)
         
         if self.aggregate:
             # pool node features per graph for graph-level predictions 
@@ -113,7 +116,17 @@ class UniMPGNN(nn.Module):
         else:
             # get the ith row of the matrix features, where i is the agent
             # for which we are interested to extract the feature vector
-            return node_out[:, agent_ids]
+
+            node_out = node_out.reshape((*adj_size[:-1], self.out_channels))
+
+            agent_ids = agent_ids.squeeze()
+
+            # print(agent_ids, agent_ids.shape)
+
+            return node_out[torch.arange(node_out.shape[0]), agent_ids, :]
+        
+            # for i in node_out[0]:
+                # out.append(node_out[i][agent_ids[i]])
 
         # node_out = (threads * n_agent, n_entities, x_j_shape)
         # (threads * n_agent, x_j_shape)

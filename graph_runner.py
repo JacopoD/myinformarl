@@ -30,25 +30,25 @@ class GMPERunner(Runner):
         for episode in range(episodes):
             for step in range(self.episode_length):
                 # Sample actions
-                # (
-                #     values,
-                #     actions,
-                #     action_log_probs,
-                #     rnn_states,
-                #     rnn_states_critic,
-                #     actions_env,
-                # ) = self.collect(step)
+                (
+                    values,
+                    actions,
+                    action_log_probs,
+                    rnn_states_actor,
+                    rnn_states_critic,
+                    actions_env,
+                ) = self.collect(step)
 
-                actions = [s.sample() for s in self.envs.action_space] + [
-                    s.sample() for s in self.envs.action_space
-                ]
-                actions = np.expand_dims(actions, 1)
-                actions = np.array(np.split(actions, self.n_rollout_threads))
-                actions_env = self.one_hot_encode_actions(actions)
-                values = None
-                action_log_probs = None
-                rnn_states_actor = None
-                rnn_states_critic = None
+                # actions = [s.sample() for s in self.envs.action_space] + [
+                #     s.sample() for s in self.envs.action_space
+                # ]
+                # actions = np.expand_dims(actions, 1)
+                # actions = np.array(np.split(actions, self.n_rollout_threads))
+                # actions_env = self.one_hot_encode_actions(actions)
+                # values = None
+                # action_log_probs = None
+                # rnn_states_actor = None
+                # rnn_states_critic = None
 
                 # Obs reward and next obs
                 obs, agent_ids, node_obs, adj, rewards, dones, infos = self.envs.step(
@@ -70,11 +70,12 @@ class GMPERunner(Runner):
                     adj_obs=adj,
                     rewards=rewards,
                     actions=actions,
-                    # values=values,
+                    values=values,
                     dones=dones,
                     rnn_states_actor=rnn_states_actor,
                     rnn_states_critic=rnn_states_critic,
-                    agent_ids=agent_ids
+                    agent_ids=agent_ids,
+                    action_log_probs=action_log_probs
                 )
 
 
@@ -83,7 +84,6 @@ class GMPERunner(Runner):
             train_infos = self.train()
             
             self.fake_reset()
-            raise NotImplementedError
 
             # post process
             total_num_steps = (
@@ -91,9 +91,9 @@ class GMPERunner(Runner):
             )
 
             # save model
-            if episode % self.save_interval == 0 or episode == episodes - 1:
-                self.save()
-
+            # if episode % self.save_interval == 0 or episode == episodes - 1:
+            #     self.save()
+            # print(f"Episode {episode} done.")
             # log information
             if episode % self.log_interval == 0:
                 env_infos = self.process_infos(infos)
@@ -159,7 +159,7 @@ class GMPERunner(Runner):
             value,
             action,
             action_log_prob,
-            rnn_states,
+            rnn_states_actor,
             rnn_states_critic,
         ) = self.trainer.policy.get_actions(
             _flatten(self.n_rollout_threads, self.num_agents, self.buffer.share_obs[step]),
@@ -178,7 +178,7 @@ class GMPERunner(Runner):
         action_log_probs = np.array(
             np.split(_t2n(action_log_prob), self.n_rollout_threads)
         )
-        rnn_states = np.array(np.split(_t2n(rnn_states), self.n_rollout_threads))
+        rnn_states_actor = np.array(np.split(_t2n(rnn_states_actor), self.n_rollout_threads))
         rnn_states_critic = np.array(
             np.split(_t2n(rnn_states_critic), self.n_rollout_threads)
         )
@@ -196,16 +196,14 @@ class GMPERunner(Runner):
         #     actions_env = np.squeeze(np.eye(self.envs.action_space[0].n)[actions], 2)
         # else:
         #     raise NotImplementedError
-        if self.envs.action_space[0].__class__.__name__ == "Discrete":
-            actions_env = self.one_hot_encode_actions(actions)
-        else:
-            raise NotImplementedError
+        # if self.envs.action_space[0].__class__.__name__ == "Discrete":
+        actions_env = self.one_hot_encode_actions(actions)
 
         return (
             values,
             actions,
             action_log_probs,
-            rnn_states,
+            rnn_states_actor,
             rnn_states_critic,
             actions_env,
         )
@@ -236,7 +234,7 @@ class GMPERunner(Runner):
         eval_obs, eval_agent_id, eval_node_obs, eval_adj = self.eval_envs.reset()
 
         eval_rnn_states = np.zeros(
-            (self.n_eval_rollout_threads, *self.buffer.rnn_states.shape[2:]),
+            (self.n_eval_rollout_threads, *self.buffer.rnn_states_actor.shape[2:]),
             dtype=np.float32,
         )
         eval_masks = np.ones(
@@ -246,13 +244,12 @@ class GMPERunner(Runner):
         for eval_step in range(self.episode_length):
             self.trainer.prep_rollout()
             eval_action, eval_rnn_states = self.trainer.policy.act(
-                np.concatenate(eval_obs),
-                np.concatenate(eval_node_obs),
-                np.concatenate(eval_adj),
-                np.concatenate(eval_agent_id),
-                np.concatenate(eval_rnn_states),
-                np.concatenate(eval_masks),
-                deterministic=True,
+                local_obs=np.concatenate(eval_obs),
+                node_obs=np.concatenate(eval_node_obs),
+                adj_obs=np.concatenate(eval_adj),
+                agent_ids=np.concatenate(eval_agent_id),
+                rnn_states_actor=np.concatenate(eval_rnn_states),
+                masks=np.concatenate(eval_masks),
             )
             eval_actions = np.array(
                 np.split(_t2n(eval_action), self.n_eval_rollout_threads)
@@ -261,23 +258,9 @@ class GMPERunner(Runner):
                 np.split(_t2n(eval_rnn_states), self.n_eval_rollout_threads)
             )
 
-            if self.eval_envs.action_space[0].__class__.__name__ == "MultiDiscrete":
-                for i in range(self.eval_envs.action_space[0].shape):
-                    eval_uc_actions_env = np.eye(
-                        self.eval_envs.action_space[0].high[i] + 1
-                    )[eval_actions[:, :, i]]
-                    if i == 0:
-                        eval_actions_env = eval_uc_actions_env
-                    else:
-                        eval_actions_env = np.concatenate(
-                            (eval_actions_env, eval_uc_actions_env), axis=2
-                        )
-            elif self.eval_envs.action_space[0].__class__.__name__ == "Discrete":
-                eval_actions_env = np.squeeze(
-                    np.eye(self.eval_envs.action_space[0].n)[eval_actions], 2
-                )
-            else:
-                raise NotImplementedError
+            eval_actions_env = np.squeeze(
+                np.eye(self.eval_envs.action_space[0].n)[eval_actions], 2
+            )
 
             # Obser reward and next obs
             (

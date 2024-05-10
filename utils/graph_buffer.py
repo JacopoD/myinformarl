@@ -14,6 +14,7 @@ class GReplayBuffer(object):
         adj_obs_shape,
     ) -> None:
         self.max_len = config.episode_length + 1
+        self.episode_len = config.episode_length
         self.pointer = 0
         self.threads = config.n_rollout_threads
         self.n_agents = config.num_agents
@@ -38,12 +39,16 @@ class GReplayBuffer(object):
         )
 
         self.actions = np.zeros(
-            (self.max_len, self.threads, self.n_agents, action_space)
+            (self.episode_len, self.threads, self.n_agents, 1)
+        )
+
+        self.action_log_probs = np.zeros(
+            (self.episode_len, self.threads, self.n_agents, 1)
         )
 
         self.agent_ids = np.zeros((self.max_len, self.threads, self.n_agents, 1))
 
-        self.rewards = np.zeros((self.max_len, self.threads, self.n_agents, 1))
+        self.rewards = np.zeros((self.episode_len, self.threads, self.n_agents, 1))
 
         self.values = np.zeros((self.max_len, self.threads, self.n_agents, 1))
 
@@ -81,39 +86,41 @@ class GReplayBuffer(object):
         adj_obs,
         rewards,
         actions,
-        # values,
+        values,
         dones,
         rnn_states_actor,
         rnn_states_critic,
         agent_ids,
+        action_log_probs
     ):
         self.done_masks[self.pointer + 1] = np.ones((self.threads, self.n_agents, 1))
         self.done_masks[self.pointer + 1][dones] = np.zeros(((dones).sum(), 1))
 
-        if not ((rnn_states_actor is None) or (rnn_states_critic is None)):
-            rnn_states_actor[dones] = np.zeros(
-                ((dones).sum(), self.n_recurrent, self.hidden_size)
-            )
-            rnn_states_critic[dones] = np.zeros(
-                ((dones).sum(), *self.rnn_states_critic.shape[3:])
-            )
-            self.rnn_states_actor[self.pointer + 1] = rnn_states_actor.copy()
-            self.rnn_states_critic[self.pointer + 1] = rnn_states_critic.copy()
+        # if not ((rnn_states_actor is None) or (rnn_states_critic is None)):
+        rnn_states_actor[dones] = np.zeros(
+            ((dones).sum(), self.n_recurrent, self.hidden_size)
+        )
+        rnn_states_critic[dones] = np.zeros(
+            ((dones).sum(), *self.rnn_states_critic.shape[3:])
+        )
+        self.rnn_states_actor[self.pointer + 1] = rnn_states_actor.copy()
+        self.rnn_states_critic[self.pointer + 1] = rnn_states_critic.copy()
 
         self.local_obs[self.pointer + 1] = local_obs.copy()
         self.node_obs[self.pointer + 1] = node_obs.copy()
         self.share_obs[self.pointer + 1] = share_obs.copy()
         self.adj_obs[self.pointer + 1] = adj_obs.copy()
-        self.rewards[self.pointer + 1] = rewards.copy()
-        self.actions[self.pointer + 1] = actions.copy()
+        self.rewards[self.pointer] = rewards.copy()
+        self.actions[self.pointer] = actions.copy()
         self.agent_ids[self.pointer + 1] = agent_ids.copy()
-        # self.values[self.pointer + 1] = values.copy()
+        self.values[self.pointer] = values.copy()
+        self.action_log_probs[self.pointer] = action_log_probs.copy()
 
-        self.pointer = (self.pointer + 1) % (self.max_len - 1)
+        self.pointer = (self.pointer + 1) % self.episode_len
 
     def cum_reward(self, next_val_pred):
         self.cumulative_rewards[-1] = next_val_pred
-        for step in range(self.rewards.shape[0])[::-1]:
+        for step in range(self.episode_len)[::-1]:
             self.cumulative_rewards[step] = (
                 self.cumulative_rewards[step + 1]
                 * self.gamma
@@ -139,6 +146,8 @@ class GReplayBuffer(object):
             -1, batch_size, *self.rnn_states_critic.shape[3:]
         )
         actions = self.actions.reshape(-1, batch_size, self.actions.shape[-1])
+
+        action_log_probs = self.action_log_probs.reshape(-1, batch_size, self.action_log_probs.shape[-1])
         values = self.values.reshape(-1, batch_size, 1)
         done_masks = self.done_masks.reshape(-1, batch_size, 1)
         cumulative_rewards = self.cumulative_rewards.reshape(-1, batch_size, 1)
@@ -160,6 +169,7 @@ class GReplayBuffer(object):
             cumulative_rewards_batch = []
             advantages_batch = []
             agent_ids_batch = []
+            old_action_log_probs_batch = []
 
             for offset in range(chunk_len):
                 idx = batch_perm[chunk + offset]
@@ -175,6 +185,7 @@ class GReplayBuffer(object):
                 cumulative_rewards_batch.append(cumulative_rewards[:-1, idx])
                 advantages_batch.append(advantages[:, idx])
                 agent_ids_batch.append(agent_ids[:-1, idx])
+                old_action_log_probs_batch.append(action_log_probs[:, idx])
 
             # (chunk_len, episode_length, *data_shape) --> (episode_length, chunk_len, *data_shape)
             share_obs_batch = np.stack(share_obs_batch, 1)
@@ -193,6 +204,7 @@ class GReplayBuffer(object):
             done_masks_batch = np.stack(done_masks_batch, 1)
             cumulative_rewards_batch = np.stack(cumulative_rewards_batch, 1)
             advantages_batch = np.stack(advantages_batch, 1)
+            old_action_log_probs_batch = np.stack(old_action_log_probs_batch, 1)
 
             # (episode_length, chunk_len, *data_shape) --> (episode_length * chunk_len, *data_shape)
             share_obs_batch = _flatten(self.max_len - 1, chunk_len, share_obs_batch)
@@ -200,6 +212,7 @@ class GReplayBuffer(object):
             node_obs_batch = _flatten(self.max_len - 1, chunk_len, node_obs_batch)
             adj_obs_batch = _flatten(self.max_len - 1, chunk_len, adj_obs_batch)
             actions_batch = _flatten(self.max_len - 1, chunk_len, actions_batch)
+            old_action_log_probs_batch = _flatten(self.max_len - 1, chunk_len, old_action_log_probs_batch)
             values_batch = _flatten(self.max_len - 1, chunk_len, values_batch)
             done_masks_batch = _flatten(self.max_len - 1, chunk_len, done_masks_batch)
             cumulative_rewards_batch = _flatten(
@@ -220,5 +233,6 @@ class GReplayBuffer(object):
                 done_masks_batch,
                 cumulative_rewards_batch,
                 advantages_batch,
-                agent_ids_batch
+                agent_ids_batch,
+                old_action_log_probs_batch
             )

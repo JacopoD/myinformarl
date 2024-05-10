@@ -52,15 +52,17 @@ class GraphActor(nn.Module):
         """
         Compute actions from the given inputs.
         """
-
+        # print("Actor")
         adj = torch.from_numpy(adj).to(torch.float32).to(self.device)
         local_obs = torch.from_numpy(local_obs).to(torch.float32).to(self.device)
         node_obs = torch.from_numpy(node_obs).to(torch.float32).to(self.device)
-        agent_ids = torch.from_numpy(agent_ids).to(torch.float32).to(self.device)
+        agent_ids = torch.from_numpy(agent_ids).to(torch.int).to(self.device)
         rnn_states = torch.from_numpy(rnn_states).to(torch.float32).to(self.device)
         masks = torch.from_numpy(masks).to(torch.float32).to(self.device)
 
         agg_nb_features = self.gnn(node_obs, adj, agent_ids=agent_ids)
+        # print("GNN Actor Done")
+        # print(local_obs.shape, node_obs.shape, agg_nb_features.shape)
         actor_features = torch.cat([local_obs, agg_nb_features], dim=1)
         actor_features = self.mlp(actor_features)
 
@@ -68,14 +70,24 @@ class GraphActor(nn.Module):
 
         actions, action_log_probs = self.act(actor_features)
 
-        return (actions, action_log_probs, rnn_states)
+        return actions, action_log_probs, rnn_states
 
-    def evaluate_actions(self) -> Tuple[Tensor, Tensor]:
+    def evaluate_actions(self, local_obs, node_obs, adj, agent_ids, rnn_states, masks, actions):
         """
         Compute log probability and entropy of given actions.
         """
+        nbd_features = self.gnn(node_obs, adj, agent_ids)
+        actor_features = torch.cat([local_obs, nbd_features], dim=1)
+        actor_features = self.mlp(actor_features)
 
-        pass
+        actor_features, rnn_states = self.rnn(actor_features, rnn_states, masks)
+
+        action_log_probs, dist_entropy = self.act.evaluate_actions(
+            actor_features,
+            actions,
+        )
+
+        return action_log_probs, dist_entropy
 
         # nbd_features = self.gnn_base(node_obs, adj, agent_id)
         # actor_features = torch.cat([obs, nbd_features], dim=1)
@@ -107,9 +119,7 @@ class GraphCritic(nn.Module):
         # critic gnn aggregates global graph features
         self.gnn = GNN(x_agg_shape, x_agg_out, True, sensing_radius=config.max_edge_dist)
 
-        mlp_input_dim = self.gnn.out_features + observation_shape
-
-        self.mlp = MLPBase(args=config, input_dim=mlp_input_dim)
+        self.mlp = MLPBase(args=config, input_dim=self.gnn.out_features)
 
         self.rnn = RNNLayer(
             config.hidden_size,
@@ -120,20 +130,33 @@ class GraphCritic(nn.Module):
 
         # self.v_out = nn.init.orthogonal_(nn.Linear(config.hidden_size, 1))
         self.v_out = nn.Linear(config.hidden_size, 1)
-        self.v_out = nn.init.orthogonal_(self.v_out.weight)
+        nn.init.orthogonal_(self.v_out.weight)
+        
         self.to(device)
 
     def forward(self, node_obs, adj, rnn_states, masks):
-        
-        node_obs = torch.from_numpy(node_obs).to(torch.float32).to(self.device)
-        adj = torch.from_numpy(adj).to(torch.float32).to(self.device)
-        rnn_states = torch.from_numpy(rnn_states).to(torch.float32).to(self.device)
-        masks = torch.from_numpy(masks).to(torch.float32).to(self.device)
+        # print("Critic")
+        if not isinstance(node_obs, torch.Tensor):
+            node_obs = torch.from_numpy(node_obs).to(torch.float32).to(self.device)
+            adj = torch.from_numpy(adj).to(torch.float32).to(self.device)
+            rnn_states = torch.from_numpy(rnn_states).to(torch.float32).to(self.device)
+            masks = torch.from_numpy(masks).to(torch.float32).to(self.device)
+
+        # print(node_obs.shape, adj.shape, rnn_states.shape, masks.shape)
 
         agg_nb_features = self.gnn(node_obs, adj)
+
+        # print("GNN Critic done!")
+
+        # print(agg_nb_features.shape)
+
         critic_features = self.mlp(agg_nb_features)
+
+        # print("MLP Critic done!")
+
+        # print(critic_features.shape)
 
         critic_features, rnn_states = self.rnn(critic_features, rnn_states, masks)
         values = self.v_out(critic_features)
 
-        return (values, rnn_states)
+        return values, rnn_states
