@@ -58,6 +58,8 @@ layer_N = 1
 use_stacked_frames = False
 stacked_frames = 1
 
+mask_agent_to_other = False
+
 
 # env
 world_size = 2
@@ -86,5 +88,5 @@ log_interval = 10
 model_dir = None
 
 graph_feat_type = "relative"
-actor_graph_aggr = "node"
-critic_graph_aggr = "global"
+# actor_graph_aggr = "node"
+# critic_graph_aggr = "global"

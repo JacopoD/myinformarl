@@ -31,6 +31,8 @@ class GraphActor(nn.Module):
             out_features=x_agg_out,
             aggregate=False,
             sensing_radius=config.max_edge_dist,
+            n_agents=config.num_agents,
+            mask_agent_to_other=config.mask_agent_to_other
         )
 
         mlp_input_dim = self.gnn.out_features + observation_shape
@@ -110,15 +112,20 @@ class GraphCritic(nn.Module):
 
         # critic gnn aggregates global graph features
         self.gnn = GNN(
-            x_agg_shape, x_agg_out, True, sensing_radius=config.max_edge_dist
+            in_features=x_agg_shape,
+            out_features=x_agg_out,
+            aggregate=True,
+            sensing_radius=config.max_edge_dist,
+            n_agents=config.num_agents,
+            mask_agent_to_other=config.mask_agent_to_other
         )
 
         self.mlp = MLPBase(args=config, input_dim=self.gnn.out_features)
 
         self.rnn = RNNLayer(
-            config.hidden_size,
-            config.hidden_size,
-            config.recurrent_N,
+            inputs_dim=config.hidden_size,
+            outputs_dim=config.hidden_size,
+            recurrent_N=config.recurrent_N,
         )
 
         # self.v_out = nn.init.orthogonal_(nn.Linear(config.hidden_size, 1))

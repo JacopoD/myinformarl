@@ -6,7 +6,7 @@ from torch_geometric.nn import MessagePassing, global_mean_pool
 from torch_geometric.utils import softmax
 
 class GNN(nn.Module):
-    def __init__(self, in_features, out_features, aggregate, sensing_radius) -> None:
+    def __init__(self, in_features, out_features, aggregate, sensing_radius, mask_agent_to_other, n_agents) -> None:
         super().__init__()
 
         self.out_features = out_features
@@ -18,7 +18,9 @@ class GNN(nn.Module):
             out_features,
             aggregate
         )
-    
+
+        self.mask_agent_to_other = mask_agent_to_other
+        self.n_agents = n_agents    
 
     def forward(self, node_obs: torch.Tensor, adj: torch.Tensor, agent_ids=None):
         # adj = (threads * n_agent, entities, entities)
@@ -40,11 +42,17 @@ class GNN(nn.Module):
 
 
     def parse_adj(self, adj: torch.Tensor):
+        # adj is NxN, N = self.agents + self.landmarks + self.obstacles
+        # self.landmarsk == self.agents
+
         assert adj.dim() == 2
         
         masks = ((adj < self.sensing_radius) * (adj > 0)).to(torch.float32)
 
         adj_masked = masks * adj
+
+        if self.mask_agent_to_other:
+            adj_masked[:self.n_agents, self.n_agents:] = 0.0
 
         #nonzero edge indexes
         nz_edge_indexes = adj_masked.nonzero(as_tuple=True)
