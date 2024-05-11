@@ -48,9 +48,6 @@ ppo_epoch = 15
 
 data_chunk_length = 10
 
-use_recurrent_policy = False
-use_naive_recurrent_policy = True
-
 split_batch = False
 
 use_feature_normalization = True
@@ -86,7 +83,7 @@ use_comm = False
 # interval
 save_interval = 100000000
 use_eval = True
-eval_interval = 10000
+eval_interval = 100
 log_interval = 10
 
 # dir
