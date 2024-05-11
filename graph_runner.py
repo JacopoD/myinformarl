@@ -91,8 +91,8 @@ class GMPERunner(Runner):
             )
 
             # save model
-            # if episode % self.save_interval == 0 or episode == episodes - 1:
-            #     self.save()
+            if episode % self.save_interval == 0 or episode == episodes - 1:
+                self.save()
             # print(f"Episode {episode} done.")
             # log information
             if episode % self.log_interval == 0:

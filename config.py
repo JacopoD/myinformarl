@@ -12,7 +12,7 @@ n_eval_rollout_threads = 2
 n_render_rollout_threads = 5
 use_linear_lr_decay = False
 hidden_size = 64
-use_wandb = False
+use_wandb = True
 use_render = False
 recurrent_N = 1
 lr = 7e-4
@@ -81,7 +81,7 @@ num_nbd_entities = 3
 use_comm = False
 
 # interval
-save_interval = 100000000
+save_interval = 1000
 use_eval = True
 eval_interval = 100
 log_interval = 10
