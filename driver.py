@@ -8,8 +8,6 @@ import os
 import wandb
 
 from envs.env_wrappers import (
-    SubprocVecEnv,
-    DummyVecEnv,
     GraphSubprocVecEnv,
     GraphDummyVecEnv,
 )

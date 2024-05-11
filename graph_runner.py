@@ -182,21 +182,7 @@ class GMPERunner(Runner):
         rnn_states_critic = np.array(
             np.split(_t2n(rnn_states_critic), self.n_rollout_threads)
         )
-        # rearrange action
-        # if self.envs.action_space[0].__class__.__name__ == "MultiDiscrete":
-        #     for i in range(self.envs.action_space[0].shape):
-        #         uc_actions_env = np.eye(self.envs.action_space[0].high[i] + 1)[
-        #             actions[:, :, i]
-        #         ]
-        #         if i == 0:
-        #             actions_env = uc_actions_env
-        #         else:
-        #             actions_env = np.concatenate((actions_env, uc_actions_env), axis=2)
-        # if self.envs.action_space[0].__class__.__name__ == "Discrete":
-        #     actions_env = np.squeeze(np.eye(self.envs.action_space[0].n)[actions], 2)
-        # else:
-        #     raise NotImplementedError
-        # if self.envs.action_space[0].__class__.__name__ == "Discrete":
+
         actions_env = self.one_hot_encode_actions(actions)
 
         return (

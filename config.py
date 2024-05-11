@@ -12,7 +12,7 @@ n_eval_rollout_threads = 2
 n_render_rollout_threads = 5
 use_linear_lr_decay = False
 hidden_size = 64
-use_wandb = True
+use_wandb = False
 use_render = False
 recurrent_N = 1
 lr = 7e-4
@@ -20,7 +20,6 @@ critic_lr = 7e-4
 opti_eps = 1e-5
 weight_decay = 0
 gain = 0.001
-use_orthogonal = True
 use_policy_active_masks = True
 use_value_active_masks = True
 use_huber_loss = True
@@ -53,9 +52,6 @@ split_batch = False
 use_feature_normalization = True
 
 use_valuenorm = True
-
-use_popart = False
-use_ReLU = True
 
 layer_N = 1
 

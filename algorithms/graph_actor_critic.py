@@ -9,7 +9,6 @@ from algorithms.utils.util import init, check
 from algorithms.utils.mlp import MLPBase
 from algorithms.utils.rnn import RNNLayer
 from algorithms.utils.act import ACTLayer
-from algorithms.utils.popart import PopArt
 from algorithms.utils.gnn import GNN
 from utils.utils import get_shape_from_obs_space
 
@@ -27,21 +26,25 @@ class GraphActor(nn.Module):
         self.device = device
 
         # actor gnn does not aggregate global graph features
-        self.gnn = GNN(x_agg_shape, x_agg_out, False, sensing_radius=config.max_edge_dist)
+        self.gnn = GNN(
+            in_features=x_agg_shape,
+            out_features=x_agg_out,
+            aggregate=False,
+            sensing_radius=config.max_edge_dist,
+        )
 
         mlp_input_dim = self.gnn.out_features + observation_shape
 
         self.mlp = MLPBase(args=config, input_dim=mlp_input_dim)
 
         self.rnn = RNNLayer(
-            config.hidden_size,
-            config.hidden_size,
-            config.recurrent_N,
-            config.use_orthogonal,
+            inputs_dim=config.hidden_size,
+            outputs_dim=config.hidden_size,
+            recurrent_N=config.recurrent_N,
         )
 
         self.act = ACTLayer(
-            action_space, config.hidden_size, config.use_orthogonal, config.gain
+            action_space=action_space, inputs_dim=config.hidden_size, gain=config.gain
         )
 
         self.to(self.device)
@@ -72,7 +75,9 @@ class GraphActor(nn.Module):
 
         return actions, action_log_probs, rnn_states
 
-    def evaluate_actions(self, local_obs, node_obs, adj, agent_ids, rnn_states, masks, actions):
+    def evaluate_actions(
+        self, local_obs, node_obs, adj, agent_ids, rnn_states, masks, actions
+    ):
         """
         Compute log probability and entropy of given actions.
         """
@@ -83,8 +88,8 @@ class GraphActor(nn.Module):
         actor_features, rnn_states = self.rnn(actor_features, rnn_states, masks)
 
         action_log_probs, dist_entropy = self.act.evaluate_actions(
-            actor_features,
-            actions,
+            x=actor_features,
+            action=actions,
         )
 
         return action_log_probs, dist_entropy
@@ -104,7 +109,9 @@ class GraphCritic(nn.Module):
         self.device = device
 
         # critic gnn aggregates global graph features
-        self.gnn = GNN(x_agg_shape, x_agg_out, True, sensing_radius=config.max_edge_dist)
+        self.gnn = GNN(
+            x_agg_shape, x_agg_out, True, sensing_radius=config.max_edge_dist
+        )
 
         self.mlp = MLPBase(args=config, input_dim=self.gnn.out_features)
 
@@ -112,13 +119,12 @@ class GraphCritic(nn.Module):
             config.hidden_size,
             config.hidden_size,
             config.recurrent_N,
-            config.use_orthogonal,
         )
 
         # self.v_out = nn.init.orthogonal_(nn.Linear(config.hidden_size, 1))
         self.v_out = nn.Linear(config.hidden_size, 1)
         nn.init.orthogonal_(self.v_out.weight)
-        
+
         self.to(device)
 
     def forward(self, node_obs, adj, rnn_states, masks):

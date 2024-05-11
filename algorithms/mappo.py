@@ -43,18 +43,11 @@ class R_MAPPO:
         self._use_max_grad_norm = args.use_max_grad_norm
         self._use_clipped_value_loss = args.use_clipped_value_loss
         self._use_huber_loss = args.use_huber_loss
-        self._use_popart = args.use_popart
         self._use_valuenorm = args.use_valuenorm
         self._use_value_active_masks = args.use_value_active_masks
         self._use_policy_active_masks = args.use_policy_active_masks
 
-        assert not (
-            self._use_popart and self._use_valuenorm
-        ), "self._use_popart and self._use_valuenorm can not be set True simultaneously"
-
-        if self._use_popart:
-            self.value_normalizer = self.policy.critic.v_out
-        elif self._use_valuenorm:
+        if self._use_valuenorm:
             self.value_normalizer = ValueNorm(1, device=self.device)
         else:
             self.value_normalizer = None
@@ -83,7 +76,7 @@ class R_MAPPO:
         value_pred_clipped = value_preds_batch + (values - value_preds_batch).clamp(
             -self.clip_param, self.clip_param
         )
-        if self._use_popart or self._use_valuenorm:
+        if self._use_valuenorm:
             self.value_normalizer.update(return_batch)
             error_clipped = (
                 self.value_normalizer.normalize(return_batch) - value_pred_clipped
@@ -234,14 +227,13 @@ class R_MAPPO:
             contains information regarding
             training update (e.g. loss, grad norms, etc).
         """
-        if self._use_popart or self._use_valuenorm:
+        if self._use_valuenorm:
             advantages = buffer.cumulative_rewards[
                 :-1
             ] - self.value_normalizer.denormalize(buffer.values[:-1])
         else:
             advantages = buffer.cumulative_rewards[:-1] - buffer.values[:-1]
         advantages_copy = advantages.copy()
-        # advantages_copy[buffer.active_masks[:-1] == 0.0] = np.nan
         mean_advantages = np.nanmean(advantages_copy)
         std_advantages = np.nanstd(advantages_copy)
         advantages = (advantages - mean_advantages) / (std_advantages + 1e-5)

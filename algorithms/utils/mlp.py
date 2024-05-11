@@ -13,15 +13,13 @@ class MLPLayer(nn.Module):
         input_dim: int,
         hidden_size: int,
         layer_N: int,
-        use_orthogonal: bool,
-        use_ReLU: bool,
     ):
         super(MLPLayer, self).__init__()
         self._layer_N = layer_N
 
-        active_func = [nn.Tanh(), nn.ReLU()][use_ReLU]
-        init_method = [nn.init.xavier_uniform_, nn.init.orthogonal_][use_orthogonal]
-        gain = nn.init.calculate_gain(["tanh", "relu"][use_ReLU])
+        active_func = nn.ReLU()
+        init_method = nn.init.orthogonal_
+        gain = nn.init.calculate_gain("relu")
 
         def init_(m):
             return init(m, init_method, lambda x: nn.init.constant_(x, 0), gain=gain)
@@ -56,8 +54,6 @@ class MLPBase(nn.Module):
         super(MLPBase, self).__init__()
 
         self._use_feature_normalization = args.use_feature_normalization
-        self._use_orthogonal = args.use_orthogonal
-        self._use_ReLU = args.use_ReLU
         self._stacked_frames = args.stacked_frames
         self._layer_N = args.layer_N
         self.hidden_size = args.hidden_size
@@ -76,8 +72,6 @@ class MLPBase(nn.Module):
             input_dim,
             self.hidden_size,
             self._layer_N,
-            self._use_orthogonal,
-            self._use_ReLU,
         )
 
     def forward(self, x: torch.tensor):

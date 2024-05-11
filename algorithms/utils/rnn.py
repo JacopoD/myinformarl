@@ -5,10 +5,10 @@ import torch.nn as nn
 
 
 class RNNLayer(nn.Module):
-    def __init__(self, inputs_dim, outputs_dim, recurrent_N, use_orthogonal):
+    def __init__(self, inputs_dim, outputs_dim, recurrent_N):
         super(RNNLayer, self).__init__()
         self._recurrent_N = recurrent_N
-        self._use_orthogonal = use_orthogonal
+        self._use_orthogonal = True
 
         self.rnn = nn.GRU(inputs_dim, outputs_dim, num_layers=self._recurrent_N)
         for name, param in self.rnn.named_parameters():
