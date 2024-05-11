@@ -68,31 +68,12 @@ class Runner(object):
                 if not os.path.exists(self.save_dir):
                     os.makedirs(self.save_dir)
 
-        # if self.config.env_name == "GraphMPE":
-        #     from onpolicy.algorithms.graph_mappo import GR_MAPPO as TrainAlgo
-        #     from onpolicy.algorithms.graph_MAPPOPolicy import GR_MAPPOPolicy as Policy
-        # else:
-        #     from onpolicy.algorithms.mappo import R_MAPPO as TrainAlgo
-        #     from onpolicy.algorithms.MAPPOPolicy import R_MAPPOPolicy as Policy
-
         # NOTE change variable input here
         if self.use_centralized_V:
             share_observation_space = self.envs.share_observation_space[0]
         else:
             share_observation_space = self.envs.observation_space[0]
 
-        # policy network
-        # if self.config.env_name == "GraphMPE":
-        #     self.policy = Policy(
-        #         self.config,
-        #         self.envs.observation_space[0],
-        #         share_observation_space,
-        #         self.envs.node_observation_space[0],
-        #         self.envs.edge_observation_space[0],
-        #         self.envs.action_space[0],
-        #         device=self.device,
-        #     )
-        # else:
         self.policy = R_MAPPOPolicy(
             config=self.config,
             local_obs_space=self.envs.observation_space[0].shape,
@@ -109,28 +90,6 @@ class Runner(object):
 
         # algorithm
         self.trainer = R_MAPPO(self.config, self.policy, device=self.device)
-
-        # buffer
-        # if self.config.env_name == "GraphMPE":
-        #     self.buffer = GraphReplayBuffer(
-        #         self.config,
-        #         self.num_agents,
-        #         self.envs.observation_space[0],
-        #         share_observation_space,
-        #         self.envs.node_observation_space[0],
-        #         self.envs.agent_id_observation_space[0],
-        #         self.envs.share_agent_id_observation_space[0],
-        #         self.envs.adj_observation_space[0],
-        #         self.envs.action_space[0],
-        #     )
-        # else:
-        # self.buffer = SharedReplayBuffer(
-        #     self.config,
-        #     self.num_agents,
-        #     self.envs.observation_space[0],
-        #     share_observation_space,
-        #     self.envs.action_space[0],
-        # )
 
         self.buffer = GReplayBuffer(
             config=self.config,

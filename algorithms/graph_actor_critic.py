@@ -89,19 +89,6 @@ class GraphActor(nn.Module):
 
         return action_log_probs, dist_entropy
 
-        # nbd_features = self.gnn_base(node_obs, adj, agent_id)
-        # actor_features = torch.cat([obs, nbd_features], dim=1)
-        # actor_features = self.base(actor_features)
-
-        # actor_features, rnn_states = self.rnn(actor_features, rnn_states, masks)
-
-        # action_log_probs, dist_entropy = self.act.evaluate_actions(
-        #     actor_features,
-        #     action
-        # )
-
-        # return (action_log_probs, dist_entropy)
-
 
 class GraphCritic(nn.Module):
     """
