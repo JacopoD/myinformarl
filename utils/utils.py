@@ -93,3 +93,28 @@ def _flatten(T, N, x):
 
 def _cast(x):
     return x.transpose(1, 2, 0, 3).reshape(-1, *x.shape[3:])
+
+
+def split_batch(
+    local_obs: Tensor, node_obs: Tensor, adj: Tensor, agent_id: Tensor, max_batch_size: int
+):
+    """
+    Split a big batch into smaller batches.
+    """
+    is_critic = False
+    if local_obs is None and agent_id is None:
+        is_critic = True
+    num_minibatches = node_obs.shape[0] // max_batch_size + 1
+    for i in range(num_minibatches):
+        if is_critic:
+            yield (
+                node_obs[i * max_batch_size : (i + 1) * max_batch_size],
+                adj[i * max_batch_size : (i + 1) * max_batch_size],
+            )
+        else:
+            yield (
+                local_obs[i * max_batch_size : (i + 1) * max_batch_size],
+                node_obs[i * max_batch_size : (i + 1) * max_batch_size],
+                adj[i * max_batch_size : (i + 1) * max_batch_size],
+                agent_id[i * max_batch_size : (i + 1) * max_batch_size],
+            )

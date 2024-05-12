@@ -10,7 +10,7 @@ from algorithms.utils.mlp import MLPBase
 from algorithms.utils.rnn import RNNLayer
 from algorithms.utils.act import ACTLayer
 from algorithms.utils.gnn import GNN
-from utils.utils import get_shape_from_obs_space
+from utils.utils import split_batch
 
 
 class GraphActor(nn.Module):
@@ -52,7 +52,7 @@ class GraphActor(nn.Module):
         self.to(self.device)
 
     def forward(
-        self, local_obs, node_obs, adj, agent_ids, rnn_states, masks
+        self, local_obs, node_obs, adj, agent_ids, rnn_states, masks, deterministic=False
     ) -> Tuple[Tensor, Tensor, Tensor]:
         """
         Compute actions from the given inputs.
@@ -73,7 +73,7 @@ class GraphActor(nn.Module):
 
         actor_features, rnn_states = self.rnn(actor_features, rnn_states, masks)
 
-        actions, action_log_probs = self.act(actor_features)
+        actions, action_log_probs = self.act(actor_features, deterministic=deterministic)
 
         return actions, action_log_probs, rnn_states
 
@@ -83,9 +83,23 @@ class GraphActor(nn.Module):
         """
         Compute log probability and entropy of given actions.
         """
-        nbd_features = self.gnn(node_obs, adj, agent_ids)
-        actor_features = torch.cat([local_obs, nbd_features], dim=1)
-        actor_features = self.mlp(actor_features)
+        # print(local_obs.shape)
+
+        gen = split_batch(local_obs, node_obs, adj, agent_ids, 32)
+
+        outs = []
+
+        for (mini_local_obs, mini_node_obs, mini_adj, mini_agent_ids) in gen:
+            nbd_features = self.gnn(mini_node_obs, mini_adj, mini_agent_ids)
+            actor_features = torch.cat([mini_local_obs, nbd_features], dim=1)
+            actor_features = self.mlp(actor_features)
+            outs.append(actor_features)
+        actor_features = torch.cat(outs, dim=0)
+
+
+        # nbd_features = self.gnn(node_obs, adj, agent_ids)
+        # actor_features = torch.cat([local_obs, nbd_features], dim=1)
+        # actor_features = self.mlp(actor_features)
 
         actor_features, rnn_states = self.rnn(actor_features, rnn_states, masks)
 
@@ -144,17 +158,21 @@ class GraphCritic(nn.Module):
 
         # print(node_obs.shape, adj.shape, rnn_states.shape, masks.shape)
 
-        agg_nb_features = self.gnn(node_obs, adj)
+        gen = split_batch(None, node_obs, adj, None, 32)
 
-        # print("GNN Critic done!")
+        outs = []
 
-        # print(agg_nb_features.shape)
+        for (mini_node_obs, mini_adj) in gen:
+            nbd_features = self.gnn(mini_node_obs, mini_adj)
+            critic_features = torch.cat([nbd_features], dim=1)
+            critic_features = self.mlp(critic_features)
+            outs.append(critic_features)
+        critic_features = torch.cat(outs, dim=0)
 
-        critic_features = self.mlp(agg_nb_features)
+        # agg_nb_features = self.gnn(node_obs, adj)
 
-        # print("MLP Critic done!")
+        # critic_features = self.mlp(agg_nb_features)
 
-        # print(critic_features.shape)
 
         critic_features, rnn_states = self.rnn(critic_features, rnn_states, masks)
         values = self.v_out(critic_features)

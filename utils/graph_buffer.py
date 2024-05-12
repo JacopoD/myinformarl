@@ -10,7 +10,6 @@ class GReplayBuffer(object):
         local_obs_shape,
         node_obs_shape,
         share_obs_shape,
-        action_space,
         adj_obs_shape,
     ) -> None:
         self.max_len = config.episode_length + 1
@@ -21,6 +20,7 @@ class GReplayBuffer(object):
         self.n_recurrent = config.recurrent_N
         self.hidden_size = config.hidden_size
         self.gamma = config.gamma
+        self.max_batch_size = config.max_batch_size
 
         self.local_obs = np.zeros(
             (self.max_len, self.threads, self.n_agents, *local_obs_shape)
@@ -38,9 +38,7 @@ class GReplayBuffer(object):
             (self.max_len, self.threads, self.n_agents, *adj_obs_shape)
         )
 
-        self.actions = np.zeros(
-            (self.episode_len, self.threads, self.n_agents, 1)
-        )
+        self.actions = np.zeros((self.episode_len, self.threads, self.n_agents, 1))
 
         self.action_log_probs = np.zeros(
             (self.episode_len, self.threads, self.n_agents, 1)
@@ -91,7 +89,7 @@ class GReplayBuffer(object):
         rnn_states_actor,
         rnn_states_critic,
         agent_ids,
-        action_log_probs
+        action_log_probs,
     ):
         self.done_masks[self.pointer + 1] = np.ones((self.threads, self.n_agents, 1))
         self.done_masks[self.pointer + 1][dones] = np.zeros(((dones).sum(), 1))
@@ -130,6 +128,7 @@ class GReplayBuffer(object):
 
     def generator(self, advantages, num_mini_batch):
         batch_size = self.threads * self.n_agents
+        assert batch_size >= num_mini_batch
         chunk_len = batch_size // num_mini_batch
         batch_perm = np.arange(batch_size)
         np.random.shuffle(batch_perm)
@@ -147,13 +146,15 @@ class GReplayBuffer(object):
         )
         actions = self.actions.reshape(-1, batch_size, self.actions.shape[-1])
 
-        action_log_probs = self.action_log_probs.reshape(-1, batch_size, self.action_log_probs.shape[-1])
+        action_log_probs = self.action_log_probs.reshape(
+            -1, batch_size, self.action_log_probs.shape[-1]
+        )
         values = self.values.reshape(-1, batch_size, 1)
         done_masks = self.done_masks.reshape(-1, batch_size, 1)
         cumulative_rewards = self.cumulative_rewards.reshape(-1, batch_size, 1)
-        
+
         advantages = advantages.reshape(-1, batch_size, 1)
-        
+
         agent_ids = self.agent_ids.reshape(-1, batch_size, 1)
 
         for chunk in range(0, batch_size, chunk_len):
@@ -212,7 +213,9 @@ class GReplayBuffer(object):
             node_obs_batch = _flatten(self.max_len - 1, chunk_len, node_obs_batch)
             adj_obs_batch = _flatten(self.max_len - 1, chunk_len, adj_obs_batch)
             actions_batch = _flatten(self.max_len - 1, chunk_len, actions_batch)
-            old_action_log_probs_batch = _flatten(self.max_len - 1, chunk_len, old_action_log_probs_batch)
+            old_action_log_probs_batch = _flatten(
+                self.max_len - 1, chunk_len, old_action_log_probs_batch
+            )
             values_batch = _flatten(self.max_len - 1, chunk_len, values_batch)
             done_masks_batch = _flatten(self.max_len - 1, chunk_len, done_masks_batch)
             cumulative_rewards_batch = _flatten(
@@ -221,6 +224,24 @@ class GReplayBuffer(object):
             advantages_batch = _flatten(self.max_len - 1, chunk_len, advantages_batch)
             agent_ids_batch = _flatten(self.max_len - 1, chunk_len, agent_ids_batch)
 
+            # print(local_obs_batch.shape)
+
+            # num_minibatches = local_obs_batch.shape[0] // self.max_batch_size + 1
+            # for i in range(num_minibatches):
+            #     yield (
+            #         local_obs_batch[
+            #             i * self.max_batch_size : (i + 1) * self.max_batch_size
+            #         ],
+            #         node_obs_batch[
+            #             i * self.max_batch_size : (i + 1) * self.max_batch_size
+            #         ],
+            #         adj_obs_batch[
+            #             i * self.max_batch_size : (i + 1) * self.max_batch_size
+            #         ],
+            #         agent_ids_batch[
+            #             i * self.max_batch_size : (i + 1) * self.max_batch_size
+            #         ],
+            #     )
             yield (
                 share_obs_batch,
                 local_obs_batch,
@@ -234,5 +255,5 @@ class GReplayBuffer(object):
                 cumulative_rewards_batch,
                 advantages_batch,
                 agent_ids_batch,
-                old_action_log_probs_batch
+                old_action_log_probs_batch,
             )

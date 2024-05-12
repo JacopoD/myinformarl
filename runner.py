@@ -27,8 +27,8 @@ class MPERunner(Runner):
 
         # This is where the episodes are actually run.
         for episode in range(episodes):
-            if self.use_linear_lr_decay:
-                self.trainer.policy.lr_decay(episode, episodes)
+            # if self.use_linear_lr_decay:
+            #     self.trainer.policy.lr_decay(episode, episodes)
 
             for step in range(self.episode_length):
                 # Sample actions
