@@ -39,7 +39,7 @@ class Runner(object):
         self.n_rollout_threads = self.config.n_rollout_threads
         self.n_eval_rollout_threads = self.config.n_eval_rollout_threads
         self.n_render_rollout_threads = self.config.n_render_rollout_threads
-        self.use_linear_lr_decay = self.config.use_linear_lr_decay
+        # self.use_linear_lr_decay = self.config.use_linear_lr_decay
         self.hidden_size = self.config.hidden_size
         self.use_wandb = self.config.use_wandb
         self.use_render = self.config.use_render
@@ -96,7 +96,6 @@ class Runner(object):
             local_obs_shape=self.envs.observation_space[0].shape,
             node_obs_shape=self.envs.node_observation_space[0].shape,
             share_obs_shape=share_observation_space.shape,
-            action_space=self.envs.action_space[0].n,
             adj_obs_shape = self.envs.adj_observation_space[0].shape,
         )
 

@@ -1,9 +1,7 @@
 import torch
 from torch import Tensor
 from typing import Tuple
-import argparse
 from algorithms.graph_actor_critic import GraphActor, GraphCritic
-from utils.utils import update_linear_schedule
 
 
 class R_MAPPOPolicy:
@@ -208,7 +206,7 @@ class R_MAPPOPolicy:
         return values, action_log_probs, dist_entropy
 
     def act(
-        self, local_obs, node_obs, adj_obs, rnn_states_actor, masks, agent_ids
+        self, local_obs, node_obs, adj_obs, rnn_states_actor, masks, agent_ids, deterministic=False
     ) -> Tuple[Tensor, Tensor]:
         """
         Compute actions using the given inputs.
@@ -232,5 +230,6 @@ class R_MAPPOPolicy:
             rnn_states=rnn_states_actor,
             masks=masks,
             agent_ids=agent_ids,
+            deterministic=deterministic
         )
         return actions, rnn_states_actor
