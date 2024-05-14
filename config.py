@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 seed = 97
-=======
-seed = 69420
->>>>>>> e40beb5e93a8999824d2efd1a493f2aa159b4c32
 env_name = "MPE"
 scenario_name = "navigation_graph"
 algorithm_name = "rmappo"
