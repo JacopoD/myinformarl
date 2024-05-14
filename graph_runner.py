@@ -236,6 +236,7 @@ class GMPERunner(Runner):
                 agent_ids=np.concatenate(eval_agent_id),
                 rnn_states_actor=np.concatenate(eval_rnn_states),
                 masks=np.concatenate(eval_masks),
+                deterministic=True
             )
             eval_actions = np.array(
                 np.split(_t2n(eval_action), self.n_eval_rollout_threads)
