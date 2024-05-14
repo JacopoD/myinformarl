@@ -71,17 +71,15 @@ class UniMPLayer(MessagePassing):
         self.out_channels = out_channels
         self.heads = heads
 
-        # Define the weights for the linear transformations
         self.w1 = nn.Linear(in_channels, out_channels)
         self.w2 = nn.Linear(in_channels, out_channels)
         self.w3 = nn.Linear(in_channels, out_channels)
         self.w4 = nn.Linear(in_channels, out_channels)
-        self.w5 = nn.Linear(1, out_channels)  # Assuming edge features are 1-dimensional
+        self.w5 = nn.Linear(1, out_channels)  
 
         self.sqrt_d = torch.sqrt(torch.tensor(out_channels, dtype=torch.float32))
 
     def forward(self, x, edge_index, edge_attr, size=None):
-        # Start propagating messages
         return self.propagate(edge_index, size=size, x=x, edge_attr=edge_attr)
 
     def message(self, x_i, x_j, edge_index_i, edge_attr, size_i):
